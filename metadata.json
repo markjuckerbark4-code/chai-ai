@@ -1,0 +1,7 @@
+{
+  "name": "Chai AI",
+  "description": "AI character roleplay and chat app with custom bots, dynamic conversations, and interactive community feed",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
