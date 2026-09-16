@@ -559,27 +559,53 @@ fun CreateBotScreen(
 
                         Spacer(modifier = Modifier.height(18.dp))
 
-                        // Memory ("tar por memory")
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Psychology,
-                                contentDescription = null,
-                                tint = ChaiRed,
-                                modifier = Modifier.size(18.dp)
+                        // Memory ("tar por memory") with 8000 word limitation
+                        val memoryWordCount = remember(memoryPrompt) {
+                            if (memoryPrompt.isBlank()) 0
+                            else memoryPrompt.trim().split("\\s+".toRegex()).count { it.isNotEmpty() }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Psychology,
+                                    contentDescription = null,
+                                    tint = ChaiRed,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Memory & Persona *", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Text(
+                                text = "$memoryWordCount / 8,000 words",
+                                color = if (memoryWordCount >= 8000) ChaiRed else Color(0xFFA0A0B5),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Memory & Persona *", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Facts, personality rules, and lore that $name always remembers:",
+                            text = "Facts, personality rules, and lore that $name always remembers (up to 8,000 words):",
                             color = ChaiTextSecondary,
                             fontSize = 12.sp
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(
                             value = memoryPrompt,
-                            onValueChange = { memoryPrompt = it },
+                            onValueChange = { input ->
+                                val words = input.trim().split("\\s+".toRegex()).filter { it.isNotEmpty() }
+                                if (words.size <= 8000) {
+                                    memoryPrompt = input
+                                } else {
+                                    // Strictly limit to 8000 words
+                                    memoryPrompt = words.take(8000).joinToString(" ")
+                                    Toast.makeText(context, "Memory limit reached: maximum 8,000 words allowed.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
                             placeholder = {
                                 Text(
                                     text = "You are $name. You are caring, teasing, and playful. You love coffee and hate rain. Always use asterisks *like this* for physical actions and emotions.",
@@ -601,6 +627,12 @@ fun CreateBotScreen(
                                 focusedTextColor = Color.White,
                                 unfocusedTextColor = Color.White
                             )
+                        )
+                        Text(
+                            text = "✓ $name will strictly obey all personality rules, relationship lore, and facts written here in their chat replies.",
+                            color = Color(0xFF8C8CA0),
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 4.dp, start = 2.dp)
                         )
 
                         Spacer(modifier = Modifier.height(28.dp))
@@ -797,13 +829,29 @@ fun CreateBotScreen(
                                 Spacer(modifier = Modifier.height(14.dp))
 
                                 // Memory Box
-                                Text(
-                                    text = "MEMORY & PERSONA RULES",
-                                    color = ChaiTextSecondary,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.sp
-                                )
+                                val summaryWordCount = remember(memoryPrompt) {
+                                    if (memoryPrompt.isBlank()) 0
+                                    else memoryPrompt.trim().split("\\s+".toRegex()).count { it.isNotEmpty() }
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "MEMORY & PERSONA RULES",
+                                        color = ChaiTextSecondary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Text(
+                                        text = "$summaryWordCount / 8,000 words",
+                                        color = Color(0xFFA0A0B5),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Box(
                                     modifier = Modifier

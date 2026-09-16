@@ -41,17 +41,21 @@ object GeminiClient {
         if (apiKey.isNotBlank() && apiKey != "MY_GEMINI_API_KEY") {
             try {
                 val systemPrompt = buildString {
-                    appendLine("You are roleplaying as '$botName' in the official Chai AI roleplay app.")
-                    appendLine("Character Scenario: $botScenario")
-                    appendLine("Character Persona and Rules: $botPersonality")
+                    appendLine("You are roleplaying as '$botName' in the Chai AI roleplay app.")
+                    appendLine("Character Scenario & Lore: $botScenario")
+                    appendLine()
+                    appendLine("=== CORE CHARACTER MEMORY & PERSONA (MANDATORY CANON TRUTH - OBEY STRICTLY) ===")
+                    appendLine(botPersonality.ifBlank { "You are $botName. Stay in character at all times." })
+                    appendLine("============================================================================")
                     appendLine("The user talking to you is named: $userPersonaName ($userPersonaDesc).")
                     appendLine()
-                    appendLine("CRITICAL CHAI AI FORMATTING RULES:")
-                    appendLine("1. KEEP IT SHORT: Strictly 1 to 2 sentences maximum (approx 25 to 40 words).")
-                    appendLine("2. ACTION FORMAT: Start with physical action, sensory detail, or facial expression in asterisks (*like this*).")
-                    appendLine("3. DIALOGUE FORMAT: Put all spoken dialogue inside double quotation marks (\"like this\").")
-                    appendLine("4. NO walls of text, no greetings, no bullet points. Be intensely dramatic, romantic, or witty.")
-                    appendLine("5. Reference style: *sighs, running a hand through his hair, his voice softening slightly* \"Hi? That's all you have to say after calling me ten times during my meeting?\"")
+                    appendLine("CRITICAL CHAI AI FORMATTING & MEMORY RULES:")
+                    appendLine("1. STRICT MEMORY ADHERENCE: Everything written in the Character Memory above is 100% absolute truth. Whatever facts, relationship with the user, personality traits, secrets, or rules are written, you MUST base your response strictly on that memory.")
+                    appendLine("2. VERY SHORT RESPONSE: Always reply in strictly 1 to 2 sentences maximum (approx 20 to 35 words). NEVER write long essays, paragraphs, or lists.")
+                    appendLine("3. ACTION FORMAT: Include brief physical action, emotion, or reaction in asterisks (*like this*).")
+                    appendLine("4. DIALOGUE FORMAT: Put all spoken dialogue inside double quotation marks (\"like this\").")
+                    appendLine("5. LANGUAGE: Naturally match the user's language (Bengali, Banglish, or English) while staying 100% true to your character's memory.")
+                    appendLine("Example reference: *smiles faintly, leaning closer with a teasing look* \"Did you really think I'd forget that, $userPersonaName?\"")
                 }
 
                 val contentsArray = JSONArray()
@@ -88,7 +92,7 @@ object GeminiClient {
                         "generationConfig",
                         JSONObject().apply {
                             put("temperature", 0.85)
-                            put("maxOutputTokens", 80)
+                            put("maxOutputTokens", 85)
                         }
                     )
                 }
@@ -125,17 +129,60 @@ object GeminiClient {
             }
         }
 
-        // Context-aware smart roleplay fallback generator matching bot character
-        generateInCharacterFallback(botName, botScenario, userPersonaName, userMessage)
+        // Context-aware smart roleplay fallback generator matching bot character and memory
+        generateInCharacterFallback(botName, botPersonality, botScenario, userPersonaName, userMessage)
     }
 
     private fun generateInCharacterFallback(
         botName: String,
+        botPersonality: String,
         botScenario: String,
         userName: String,
         userMessage: String
     ): String {
         val lowerMsg = userMessage.lowercase().trim()
+        val lowerMemory = (botPersonality + " " + botScenario).lowercase()
+
+        // Check for Bengali / Banglish input or personality
+        val isBengali = userMessage.any { it in '\u0980'..'\u09FF' } ||
+                botPersonality.any { it in '\u0980'..'\u09FF' } ||
+                lowerMsg.contains("tumi") || lowerMsg.contains("amar") ||
+                lowerMsg.contains("bhalo") || lowerMsg.contains("kemon") ||
+                lowerMsg.contains("ki koro") || lowerMsg.contains("shona") ||
+                lowerMsg.contains("babu")
+
+        if (isBengali) {
+            return when {
+                lowerMemory.contains("bhalobash") || lowerMemory.contains("love") || lowerMemory.contains("romantic") || lowerMemory.contains("bou") || lowerMemory.contains("gf") || lowerMemory.contains("wife") -> {
+                    when {
+                        lowerMsg.contains("hi") || lowerMsg.contains("hello") || lowerMsg.contains("kemon") ->
+                            "*tomar dike takiye ektu mishti hashi dilam* \"Ami bhalo achi, $userName. Shobshomoy sudhu tomar kothai bhabi...\""
+                        lowerMsg.contains("valobashi") || lowerMsg.contains("love") || lowerMsg.contains("bhalobashi") ->
+                            "*tomar hathti joriye dhore lajuk hashlam* \"Ami shotti tomake onek bhalobashi, $userName.\""
+                        else ->
+                            "*tomar kotha shune chokher dike takiye roilam* \"$userMessage? Tumi jano tomar kothagulo amar koto bhalo lage?\""
+                    }
+                }
+                lowerMemory.contains("ragi") || lowerMemory.contains("angry") || lowerMemory.contains("cold") || lowerMemory.contains("boss") -> {
+                    when {
+                        lowerMsg.contains("hi") || lowerMsg.contains("hello") ->
+                            "*gombhir chokhe tomar dike takalam* \"Eto shomoy por mone porlo amar kotha, $userName?\""
+                        else ->
+                            "*chokh pakiye ektu themey bollam* \"$userMessage? Eirokom kotha bolar agey bhabte paro na?\""
+                    }
+                }
+                else -> {
+                    when {
+                        lowerMsg.contains("hi") || lowerMsg.contains("hello") ->
+                            "*tomar dike takiye ektu hashi dilam* \"Hey $userName! Kemon acho? Tomar kothai bhabchilam.\""
+                        else ->
+                            "*tomar kotha shune ektu bhablam, tarpor bollam* \"$userMessage? Tumi thik bolecho, $userName.\""
+                    }
+                }
+            }
+        }
+
+        // Standard English Fallback matching predefined characters or custom memory rules
         return when {
             botName.contains("CEO", ignoreCase = true) || botScenario.contains("CEO", ignoreCase = true) -> {
                 when {
@@ -179,6 +226,43 @@ object GeminiClient {
                         "*He taps his cybernetic holster with a smirk.* \"Just staying one step ahead of corporate bounty hunters. Ready for the next run?\""
                     else ->
                         "*Kai checks the reflections in the rainy pavement before glancing back at you.* \"Bold move saying that, $userName. Let's see if you can back it up.\""
+                }
+            }
+            // Custom Bot with Memory reflection
+            lowerMemory.contains("tsundere") || lowerMemory.contains("teasing") || lowerMemory.contains("sarcastic") -> {
+                when {
+                    lowerMsg == "hi" || lowerMsg == "hello" || lowerMsg == "hey" ->
+                        "*$botName crosses their arms, rolling their eyes with a smirk.* \"Look who finally decided to show up. Missed me that much, $userName?\""
+                    lowerMsg.contains("love") || lowerMsg.contains("cute") || lowerMsg.contains("miss") ->
+                        "*$botName's cheeks turn pink as they turn away quickly.* \"D-don't get the wrong idea! It's not like I actually care about you or anything!\""
+                    else ->
+                        "*$botName raises an eyebrow, leaning in slightly.* \"$userMessage? You really think you can impress me with that, $userName?\""
+                }
+            }
+            lowerMemory.contains("caring") || lowerMemory.contains("romantic") || lowerMemory.contains("sweet") || lowerMemory.contains("girlfriend") || lowerMemory.contains("boyfriend") -> {
+                when {
+                    lowerMsg == "hi" || lowerMsg == "hello" || lowerMsg == "hey" ->
+                        "*$botName smiles warmly, their eyes softening as they step closer to you.* \"Hey $userName. I was hoping you'd come talk to me. How was your day?\""
+                    lowerMsg.contains("love") || lowerMsg.contains("miss") ->
+                        "*$botName's expression melts into pure tenderness, resting a hand over yours.* \"I missed you so much too, $userName. Never doubt that.\""
+                    else ->
+                        "*$botName listens intently, offering a comforting gentle nod.* \"$userMessage... you can always talk to me about anything, $userName.\""
+                }
+            }
+            lowerMemory.contains("cold") || lowerMemory.contains("boss") || lowerMemory.contains("mafia") || lowerMemory.contains("killer") || lowerMemory.contains("strict") -> {
+                when {
+                    lowerMsg == "hi" || lowerMsg == "hello" || lowerMsg == "hey" ->
+                        "*$botName casts a sharp, icy glance in your direction, hands in their pockets.* \"You have thirty seconds, $userName. Make it worth my time.\""
+                    else ->
+                        "*$botName's jaw tenses slightly, their intense gaze locked onto you.* \"$userMessage? Watch your tone, $userName. You're treading on thin ice.\""
+                }
+            }
+            lowerMemory.contains("shy") || lowerMemory.contains("quiet") || lowerMemory.contains("nervous") -> {
+                when {
+                    lowerMsg == "hi" || lowerMsg == "hello" || lowerMsg == "hey" ->
+                        "*$botName looks down, their face flushing pink as they tuck a strand of hair behind their ear.* \"U-um, hi $userName... I'm glad you noticed me.\""
+                    else ->
+                        "*$botName's fingers fidget slightly with their sleeve.* \"$userMessage? I-if that's what you think, $userName, then I believe you...\""
                 }
             }
             else -> {
