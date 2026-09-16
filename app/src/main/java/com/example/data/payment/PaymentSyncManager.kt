@@ -29,6 +29,17 @@ data class PaymentOrder(
     val createdAt: String = ""
 )
 
+data class CloudUserStatus(
+    val userId: String = "",
+    val name: String = "",
+    val email: String = "",
+    val tier: String = "none", // "none", "premium", "ultra"
+    val isPremium: Boolean = false,
+    val isBanned: Boolean = false,
+    val expiryDate: String? = null,
+    val notice: String? = null
+)
+
 object PaymentSyncManager {
     private const val TAG = "PaymentSyncManager"
     private const val BUCKET_ID = "ChaiAiApp_7v9x2m"
@@ -36,7 +47,7 @@ object PaymentSyncManager {
     private const val PREFS_NAME = "chai_payment_prefs"
     private const val KEY_LAST_STATUS = "key_last_payment_status"
 
-    private fun cleanEmailKey(email: String): String {
+    fun cleanEmailKey(email: String): String {
         return email.lowercase().replace("@", "_at_").replace(".", "_dot_").replace("+", "_plus_")
     }
 
@@ -44,6 +55,150 @@ object PaymentSyncManager {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
         sdf.timeZone = TimeZone.getTimeZone("UTC")
         return sdf.format(Date())
+    }
+
+    /**
+     * Registers and syncs user to the Cloud KV database (/users and /user_{email})
+     * so that the Admin Panel immediately displays them in the Users list.
+     */
+    suspend fun syncUserRegistration(
+        userId: String,
+        name: String,
+        email: String,
+        provider: String
+    ) = withContext(Dispatchers.IO) {
+        if (email.isBlank()) return@withContext
+        try {
+            val userKey = "user_" + cleanEmailKey(email)
+            // Check existing user data if any
+            val existingData = getKvData("$BASE_KV_URL/$userKey")
+            var currentTier = "none"
+            var isBanned = false
+            var isPremium = false
+            var expiryDate: String? = null
+
+            if (existingData.isNotBlank()) {
+                val json = JSONObject(existingData)
+                currentTier = json.optString("tier", "none")
+                isBanned = json.optBoolean("is_banned", false)
+                isPremium = json.optBoolean("is_premium", false)
+                if (json.has("expiry_date") && !json.isNull("expiry_date")) {
+                    expiryDate = json.optString("expiry_date")
+                }
+            }
+
+            // 1. Post to user-specific key
+            val userObj = JSONObject().apply {
+                put("user_id", userId)
+                put("name", name)
+                put("email", email)
+                put("provider", provider)
+                put("tier", currentTier)
+                put("is_premium", isPremium)
+                put("is_banned", isBanned)
+                if (expiryDate != null) put("expiry_date", expiryDate)
+                put("last_active", getIsoDate())
+            }
+            postKvData("$BASE_KV_URL/$userKey", userObj.toString())
+
+            // 2. Add or update in /users array
+            val usersJson = getKvData("$BASE_KV_URL/users")
+            val usersArray = if (usersJson.isNotBlank() && usersJson.trim().startsWith("[")) {
+                JSONArray(usersJson)
+            } else {
+                JSONArray()
+            }
+
+            var found = false
+            for (i in 0 until usersArray.length()) {
+                val item = usersArray.optJSONObject(i) ?: continue
+                if (item.optString("email").equals(email, ignoreCase = true) ||
+                    item.optString("user_id").equals(userId, ignoreCase = true)) {
+                    item.put("name", name)
+                    item.put("provider", provider)
+                    item.put("user_id", userId)
+                    item.put("last_active", getIsoDate())
+                    found = true
+                    break
+                }
+            }
+
+            if (!found) {
+                val newUserJson = JSONObject().apply {
+                    put("user_id", userId)
+                    put("name", name)
+                    put("email", email)
+                    put("provider", provider)
+                    put("tier", currentTier)
+                    put("is_banned", isBanned)
+                    put("is_premium", isPremium)
+                    if (expiryDate != null) put("expiry_date", expiryDate)
+                    put("created_at", getIsoDate())
+                    put("last_active", getIsoDate())
+                }
+                usersArray.put(newUserJson)
+            }
+
+            postKvData("$BASE_KV_URL/users", usersArray.toString())
+            Log.d(TAG, "User registered in cloud: $userId - $email")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to sync user to cloud", e)
+        }
+    }
+
+    /**
+     * Checks if this user's account has been banned, approved, or assigned a tier (none/premium/ultra).
+     */
+    suspend fun fetchUserStatus(
+        userEmail: String
+    ): CloudUserStatus? = withContext(Dispatchers.IO) {
+        if (userEmail.isBlank()) return@withContext null
+
+        try {
+            val userKey = "user_" + cleanEmailKey(userEmail)
+            val response = getKvData("$BASE_KV_URL/$userKey")
+            if (response.isNotBlank()) {
+                val json = JSONObject(response)
+                val status = json.optString("status", "")
+                var isPremium = json.optBoolean("is_premium", false) || status.equals("approved", ignoreCase = true)
+                var tier = json.optString("tier", if (isPremium) "premium" else "none")
+                val isBanned = json.optBoolean("is_banned", false)
+                val userId = json.optString("user_id", "")
+                val name = json.optString("name", "")
+                val expiryDate = if (json.has("expiry_date") && !json.isNull("expiry_date")) {
+                    json.optString("expiry_date")
+                } else null
+
+                // Check if expiry date has passed
+                if (expiryDate != null && isPremium) {
+                    try {
+                        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+                        sdf.timeZone = TimeZone.getTimeZone("UTC")
+                        val expiryTime = sdf.parse(expiryDate)?.time ?: Long.MAX_VALUE
+                        if (System.currentTimeMillis() > expiryTime) {
+                            // Expired!
+                            isPremium = false
+                            tier = "none"
+                        }
+                    } catch (e: Exception) {
+                        Log.d(TAG, "Expiry date parse error: $e")
+                    }
+                }
+
+                return@withContext CloudUserStatus(
+                    userId = userId,
+                    name = name,
+                    email = userEmail,
+                    tier = tier,
+                    isPremium = isPremium,
+                    isBanned = isBanned,
+                    expiryDate = expiryDate
+                )
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Status check notice: ${e.message}")
+        }
+        null
     }
 
     /**

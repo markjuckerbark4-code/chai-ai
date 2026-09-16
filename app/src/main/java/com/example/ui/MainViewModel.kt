@@ -79,7 +79,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             userId = "CHAI-939348",
             memberTier = "Standard Member",
             avatarInitial = "M",
-            joinDate = "Sep 2024"
+            joinDate = "Sep 2024",
+            isPremium = false,
+            tier = "none",
+            isBanned = false,
+            expiryDate = null
         )
     )
     val userName = MutableStateFlow("Mark Juckerbark")
@@ -97,6 +101,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             repository.seedInitialDataIfEmpty()
+            // Sync default/current user to cloud registry
+            val current = userAccount.value
+            PaymentSyncManager.syncUserRegistration(
+                userId = current.userId,
+                name = current.name,
+                email = current.email,
+                provider = current.provider
+            )
         }
     }
 
@@ -271,15 +283,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             memberTier = "Standard Member",
             avatarInitial = initial,
             joinDate = "Sep 2024",
-            isPremium = false
+            isPremium = false,
+            tier = "none",
+            isBanned = false,
+            expiryDate = null
         )
         userName.value = name
         isLoggedIn.value = true
+        // Sync user registration to cloud KV database immediately
+        viewModelScope.launch {
+            PaymentSyncManager.syncUserRegistration(uid, name, email, provider)
+        }
         // Directly show Account/Profile tab upon login
         selectedTab.value = 4
         // Automatically show "Premium কিনুন" popup dialog on new login as requested!
         isSubscriptionSheetVisible.value = true
-        // Check if user is already approved in cloud or start polling
+        // Check if user is already approved in cloud or start continuous sync
         startApprovalCheckLoop(email)
     }
 
@@ -322,10 +341,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         isSubscriptionSheetVisible.value = false
     }
 
-    fun grantPremium() {
+    fun grantPremium(tierName: String = "Chai Ultra (10 Months)", tierCode: String = "ultra") {
         userAccount.value = userAccount.value.copy(
-            memberTier = "Chai Ultra Premium",
-            isPremium = true
+            memberTier = tierName,
+            isPremium = true,
+            tier = tierCode
         )
         freeMessagesLeft.value = "Unlimited"
     }
@@ -334,20 +354,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (email.isBlank()) return
         approvalJob?.cancel()
         approvalJob = viewModelScope.launch {
-            // Check immediately
-            val initialApproved = PaymentSyncManager.checkUserApprovalStatus(getApplication(), email)
-            if (initialApproved) {
-                grantPremium()
-                return@launch
-            }
-            // Poll every 4 seconds
-            while (!userAccount.value.isPremium) {
-                delay(4000)
-                val isApproved = PaymentSyncManager.checkUserApprovalStatus(getApplication(), email)
-                if (isApproved) {
-                    grantPremium()
-                    break
+            while (true) {
+                val cloudStatus = PaymentSyncManager.fetchUserStatus(email)
+                if (cloudStatus != null) {
+                    val isBanned = cloudStatus.isBanned
+                    val tier = cloudStatus.tier.lowercase()
+                    val isPrem = cloudStatus.isPremium || tier == "premium" || tier == "ultra"
+
+                    val memberTitle = when (tier) {
+                        "ultra" -> "Chai Ultra (10 Months)"
+                        "premium" -> "Chai Premium (7 Days)"
+                        else -> if (isPrem) "Chai Ultra Premium" else "Standard Member"
+                    }
+
+                    userAccount.value = userAccount.value.copy(
+                        isBanned = isBanned,
+                        tier = tier,
+                        isPremium = isPrem,
+                        memberTier = memberTitle,
+                        expiryDate = cloudStatus.expiryDate
+                    )
+
+                    if (isPrem) {
+                        freeMessagesLeft.value = "Unlimited"
+                    } else {
+                        freeMessagesLeft.value = "0"
+                    }
                 }
+                delay(3000)
             }
         }
     }
@@ -369,5 +403,8 @@ data class UserAccount(
     val memberTier: String = "Standard Member",
     val avatarInitial: String = "M",
     val joinDate: String = "Sep 2024",
-    val isPremium: Boolean = false
+    val isPremium: Boolean = false,
+    val tier: String = "none", // "none", "premium", "ultra"
+    val isBanned: Boolean = false,
+    val expiryDate: String? = null
 )

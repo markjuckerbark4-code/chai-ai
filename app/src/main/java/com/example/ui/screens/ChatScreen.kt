@@ -36,6 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
@@ -270,6 +271,31 @@ fun ChatScreen(
                     )
                 }
             }
+        }
+
+        // Cooldown & Server Policy Notice Banner (User Request: "1 ghonta ba 2 ghonta calanor por 30 minit cool down")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF1A130D))
+                .border(0.5.dp, Color(0xFF4E342E))
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                tint = Color(0xFFFFB74D),
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "নোটিশ: ১-২ ঘণ্টা একটানা চ্যাটের পর ৩০ মিনিট কুল ডাউন (Cool Down) থাকবে।",
+                color = Color(0xFFFFE0B2),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
+            )
         }
 
         // Active Persona notice if set

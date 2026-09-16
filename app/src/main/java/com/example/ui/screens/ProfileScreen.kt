@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -202,6 +203,45 @@ fun ProfileScreen(
             fontSize = 13.sp
         )
 
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Unique User ID Pill with Copy Action
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF191926))
+                .border(1.dp, Color(0xFF2C2C3E), RoundedCornerShape(20.dp))
+                .clickable {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Chai User ID", userAccount.userId))
+                    Toast.makeText(context, "User ID কপি হয়েছে: ${userAccount.userId}", Toast.LENGTH_SHORT).show()
+                }
+                .padding(horizontal = 14.dp, vertical = 6.dp)
+                .testTag("profile_user_id_pill")
+        ) {
+            Text(
+                text = "ID: ",
+                color = ChaiTextSecondary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = userAccount.userId,
+                color = Color(0xFFFFD54F),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Icon(
+                imageVector = Icons.Default.ContentCopy,
+                contentDescription = "Copy User ID",
+                tint = Color(0xFFAAAAAA),
+                modifier = Modifier.size(13.dp)
+            )
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         // Free messages left Card (User Request: "tar nice free massage left eta zero thakbi jodi kew taka deai ar ami admin panal e aprove di taile ekhane unlimited show korbi")
@@ -262,7 +302,7 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = if (userAccount.isPremium) {
-                            "Chai Ultra Premium Active • অনুমোদিত"
+                            "${userAccount.memberTier} Active • অনুমোদিত"
                         } else {
                             "সীমা শেষ • আনলিমিটেড করতে রিচার্জ করুন"
                         },
@@ -286,6 +326,54 @@ fun ProfileScreen(
                             color = Color.White
                         )
                     }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Server Cooldown Notice Card (User Request: "ar notic thakbi 1 ghonta ba 2 ghonta calanor por 30 minit cool down")
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF1D1612))
+                .border(1.dp, Color(0xFF533829), RoundedCornerShape(16.dp))
+                .padding(14.dp)
+                .testTag("cooldown_notice_card")
+        ) {
+            Row(verticalAlignment = Alignment.Top) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF382318)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "Server Policy Notice",
+                        tint = Color(0xFFFFB74D),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "সার্ভার নোটিশ ও কুল ডাউন (Cool Down)",
+                        color = Color(0xFFFFB74D),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "১ ঘণ্টা বা ২ ঘণ্টা একটানা ব্যবহারের পর ৩০ মিনিট কুল ডাউন (Cool Down) থাকবে। এটি এআই সার্ভার রিলোড, মেমরি রিফ্রেশ ও স্মুথ চ্যাটিংয়ের জন্য প্রযোজ্য।",
+                        color = Color(0xFFFFE0B2),
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
                 }
             }
         }

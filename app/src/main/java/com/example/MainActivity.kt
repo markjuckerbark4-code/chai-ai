@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.MainViewModel
 import com.example.ui.components.ChaiBottomNav
+import com.example.ui.screens.BannedScreen
 import com.example.ui.screens.ChatScreen
 import com.example.ui.screens.ChatsListScreen
 import com.example.ui.screens.CreateBotScreen
@@ -70,6 +71,11 @@ fun ChaiApp(viewModel: MainViewModel = viewModel()) {
             onSignIn = { name, email, provider ->
                 viewModel.login(name, email, provider)
             }
+        )
+    } else if (userAccount.isBanned) {
+        BannedScreen(
+            userAccount = userAccount,
+            onLogout = { viewModel.logout() }
         )
     } else {
         if (activeBot != null) {
