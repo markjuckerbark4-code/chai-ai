@@ -75,6 +75,8 @@ import com.example.ui.theme.ChaiTextSecondary
 @Composable
 fun CreateBotScreen(
     currentUserName: String,
+    isPremium: Boolean = false,
+    onOpenUpgrade: () -> Unit = {},
     onCreateBot: (
         name: String,
         creatorName: String,
@@ -87,6 +89,129 @@ fun CreateBotScreen(
     ) -> Unit
 ) {
     val context = LocalContext.current
+
+    if (!isPremium) {
+        // Locked Screen when user is not premium
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(ChaiBlack)
+                .padding(24.dp)
+                .testTag("create_bot_locked_screen"),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(90.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF2B161B))
+                    .border(2.dp, Color(0xFFE50914), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = "Premium Required",
+                    tint = Color(0xFFE50914),
+                    modifier = Modifier.size(44.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "Bot তৈরি করতে Premium প্রয়োজন",
+                color = Color.White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "কাস্টম AI বট তৈরি ও ৮,০০০ শব্দের মেমরি কনফিগার করার সুবিধা শুধুমাত্র Chai Ultra Premium মেম্বারদের জন্য সংরক্ষিত।\nনিজের ক্যারেক্টার তৈরি করতে এখনই প্রিমিয়াম আনলক করুন।",
+                color = ChaiTextSecondary,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFF161622))
+                    .border(1.dp, Color(0xFF262638), RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    listOf(
+                        "👑 আনলিমিটেড কাস্টম AI বট তৈরি ও পাবলিশ",
+                        "🧠 ৮,০০০ শব্দের লং-টার্ম মেমরি ও ব্যাকস্টোরি",
+                        "💬 আনলিমিটেড মেসেজ ও কোনো লিমিটেশন ছাড়া চ্যাট",
+                        "⚡ আল্ট্রা-ফাস্ট রেসপন্স ও এক্সক্লুসিভ ফিচার"
+                    ).forEach { feature ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF4CAF50)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = feature,
+                                color = Color(0xFFE0E0E0),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            Button(
+                onClick = onOpenUpgrade,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .testTag("unlock_premium_create_bot_button"),
+                shape = RoundedCornerShape(26.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = ChaiRed)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Premium কিনুন (Chai Ultra)",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+        return
+    }
 
     // Steps: 1 = Identity, 2 = Prompt & Memory, 3 = Intro Details & Publish
     var currentStep by remember { mutableIntStateOf(1) }

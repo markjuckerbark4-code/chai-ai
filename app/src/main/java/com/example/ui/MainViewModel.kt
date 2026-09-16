@@ -7,7 +7,9 @@ import com.example.data.database.ChaiDatabase
 import com.example.data.model.BotEntity
 import com.example.data.model.MessageEntity
 import com.example.data.model.PersonaEntity
+import com.example.data.payment.PaymentSyncManager
 import com.example.data.repository.ChaiRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -81,11 +83,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     )
     val userName = MutableStateFlow("Mark Juckerbark")
-    val freeMessagesLeft = MutableStateFlow("70")
+    val freeMessagesLeft = MutableStateFlow("0")
     val piecesCount = MutableStateFlow(200)
 
     val isSubscriptionSheetVisible = MutableStateFlow(false)
     val isGeneratingReply = MutableStateFlow(false)
+
+    private var approvalJob: Job? = null
 
     private val _streamingBotReply = MutableStateFlow<StreamingReply?>(null)
     val streamingBotReply: StateFlow<StreamingReply?> = _streamingBotReply.asStateFlow()
@@ -266,15 +270,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             userId = uid,
             memberTier = "Standard Member",
             avatarInitial = initial,
-            joinDate = "Sep 2024"
+            joinDate = "Sep 2024",
+            isPremium = false
         )
         userName.value = name
         isLoggedIn.value = true
-        // Directly show Account/Profile tab upon login as requested ("Login korle account dekhabi")
+        // Directly show Account/Profile tab upon login
         selectedTab.value = 4
+        // Automatically show "Premium কিনুন" popup dialog on new login as requested!
+        isSubscriptionSheetVisible.value = true
+        // Check if user is already approved in cloud or start polling
+        startApprovalCheckLoop(email)
     }
 
     fun logout() {
+        approvalJob?.cancel()
         isLoggedIn.value = false
         selectedTab.value = 0
     }
@@ -283,13 +293,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         piecesCount.value += amount
     }
 
-    fun buyPremium(plan: String = "Weekly", paymentMethod: String = "bKash", trxId: String = "") {
+    fun buyPremium(
+        plan: String = "Weekly (230 Taka)",
+        paymentMethod: String = "bKash",
+        senderNumber: String = "",
+        trxId: String = ""
+    ) {
+        val email = userAccount.value.email
+        val name = userAccount.value.name
+        val amount = if (plan.contains("2000")) "2000.00" else "230.00"
+
+        // Submit order to cloud so admin panel receives it immediately!
+        viewModelScope.launch {
+            PaymentSyncManager.submitOrder(
+                context = getApplication(),
+                userName = name,
+                userEmail = email,
+                paymentMethod = paymentMethod,
+                senderNumber = senderNumber,
+                trxId = trxId,
+                plan = plan,
+                amount = amount
+            )
+            // Continuously listen for admin approval
+            startApprovalCheckLoop(email)
+        }
+
+        isSubscriptionSheetVisible.value = false
+    }
+
+    fun grantPremium() {
         userAccount.value = userAccount.value.copy(
             memberTier = "Chai Ultra Premium",
             isPremium = true
         )
         freeMessagesLeft.value = "Unlimited"
-        isSubscriptionSheetVisible.value = false
+    }
+
+    fun startApprovalCheckLoop(email: String) {
+        if (email.isBlank()) return
+        approvalJob?.cancel()
+        approvalJob = viewModelScope.launch {
+            // Check immediately
+            val initialApproved = PaymentSyncManager.checkUserApprovalStatus(getApplication(), email)
+            if (initialApproved) {
+                grantPremium()
+                return@launch
+            }
+            // Poll every 4 seconds
+            while (!userAccount.value.isPremium) {
+                delay(4000)
+                val isApproved = PaymentSyncManager.checkUserApprovalStatus(getApplication(), email)
+                if (isApproved) {
+                    grantPremium()
+                    break
+                }
+            }
+        }
     }
 
     fun showSubscriptionSheet(show: Boolean) {

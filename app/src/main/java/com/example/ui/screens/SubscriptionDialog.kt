@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -66,7 +67,7 @@ import com.example.ui.theme.ChaiTextSecondary
 @Composable
 fun SubscriptionDialog(
     onDismiss: () -> Unit,
-    onBuyPremium: (plan: String, paymentMethod: String, trxId: String) -> Unit = { _, _, _ -> }
+    onBuyPremium: (plan: String, paymentMethod: String, senderNumber: String, trxId: String) -> Unit = { _, _, _, _ -> }
 ) {
     val context = LocalContext.current
     var selectedPlan by remember { mutableStateOf("Weekly") } // "Weekly" or "Yearly"
@@ -503,14 +504,22 @@ fun SubscriptionDialog(
                 // Submit / Activate Premium Button
                 Button(
                     onClick = {
-                        val finalPlan = if (selectedPlan == "Weekly") "Weekly (230 Taka)" else "Yearly (2000 Taka)"
-                        onBuyPremium(finalPlan, selectedMethod, trxId)
-                        Toast.makeText(
-                            context,
-                            "🎉 অভিনন্দন! আপনার $finalPlan Premium অ্যাক্টিভ হয়েছে। Free messages: Unlimited!",
-                            Toast.LENGTH_LONG
-                        ).show()
-                        onDismiss()
+                        if (senderNumber.isBlank() || trxId.isBlank()) {
+                            Toast.makeText(
+                                context,
+                                "দয়া করে আপনার $selectedMethod নম্বর এবং TrxID প্রদান করুন।",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            val finalPlan = if (selectedPlan == "Weekly") "Weekly (৳230)" else "Yearly (৳2000)"
+                            onBuyPremium(finalPlan, selectedMethod, senderNumber.trim(), trxId.trim())
+                            Toast.makeText(
+                                context,
+                                "✅ পেমেন্ট রিকোয়েস্ট অ্যাডমিন প্যানেলে পাঠানো হয়েছে!\nTrxID: ${trxId.trim().uppercase()}\nঅ্যাডমিন ভেরিফাই করে অ্যাপ্রুভ করলেই আপনার অ্যাকাউন্টে Unlimited মেসেজ চালু হয়ে যাবে।",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            onDismiss()
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -519,12 +528,24 @@ fun SubscriptionDialog(
                     shape = RoundedCornerShape(27.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = ChaiRed)
                 ) {
-                    Text(
-                        text = "পেমেন্ট নিশ্চিত করুন & Premium চালু করুন",
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "পেমেন্ট তথ্য সাবমিট করুন",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))

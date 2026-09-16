@@ -131,6 +131,8 @@ fun ChaiApp(viewModel: MainViewModel = viewModel()) {
                             )
                             2 -> CreateBotScreen(
                                 currentUserName = userAccount.name,
+                                isPremium = userAccount.isPremium,
+                                onOpenUpgrade = { viewModel.showSubscriptionSheet(true) },
                                 onCreateBot = { name, creator, tagline, desc, firstMsg, prompt, cat, avatar ->
                                     viewModel.createNewBot(name, creator, tagline, desc, firstMsg, prompt, cat, avatar)
                                 }
@@ -163,8 +165,8 @@ fun ChaiApp(viewModel: MainViewModel = viewModel()) {
         if (isSubscriptionSheetVisible) {
             SubscriptionDialog(
                 onDismiss = { viewModel.showSubscriptionSheet(false) },
-                onBuyPremium = { plan, method, trxId ->
-                    viewModel.buyPremium(plan, method, trxId)
+                onBuyPremium = { plan, method, senderNumber, trxId ->
+                    viewModel.buyPremium(plan, method, senderNumber, trxId)
                 }
             )
         }

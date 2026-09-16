@@ -254,6 +254,7 @@
 
   <script>
     const STORAGE_KEY = 'chai_admin_orders_v1';
+    const BUCKET_URL = 'https://kvdb.io/ChaiAiApp_7v9x2m';
     let currentFilter = 'pending';
     let allOrders = [];
 
@@ -297,23 +298,10 @@
         status: 'approved',
         rejection_reason: null,
         created_at: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
-      },
-      {
-        order_id: 'ord-104',
-        user_name: 'Fahim Faisal',
-        user_email: 'fahim.dev@gmail.com',
-        payment_method: 'Nagad',
-        sender_number: '01633-998877',
-        trx_id: 'NGD00192834',
-        plan: 'Weekly (৳230)',
-        amount: '230.00',
-        status: 'rejected',
-        rejection_reason: 'Transaction ID not found in Nagad merchant statement.',
-        created_at: new Date(Date.now() - 1000 * 60 * 600).toISOString(),
       }
     ];
 
-    function loadOrders() {
+    async function loadOrders() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         try {
@@ -326,16 +314,49 @@
         saveOrders();
       }
       render();
+      await fetchCloudOrders();
+    }
+
+    async function fetchCloudOrders() {
+      try {
+        const res = await fetch(`${BUCKET_URL}/orders`);
+        if (res.ok) {
+          const text = await res.text();
+          if (text && text.trim().startsWith('[')) {
+            const cloudList = JSON.parse(text);
+            if (Array.isArray(cloudList) && cloudList.length > 0) {
+              allOrders = cloudList;
+              saveOrders();
+              render();
+            }
+          }
+        }
+      } catch (e) {
+        console.log('Cloud sync idle:', e);
+      }
     }
 
     function saveOrders() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(allOrders));
     }
 
-    function resetToDefaultData() {
+    async function saveOrdersCloud() {
+      saveOrders();
+      try {
+        await fetch(`${BUCKET_URL}/orders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(allOrders)
+        });
+      } catch (e) {
+        console.error('Error saving orders to cloud:', e);
+      }
+    }
+
+    async function resetToDefaultData() {
       if (confirm('Reset orders back to default sample requests?')) {
         allOrders = defaultOrders;
-        saveOrders();
+        await saveOrdersCloud();
         render();
         showToast('Reset to default orders.', 'info');
       }
@@ -358,31 +379,70 @@
       render(query.trim().toLowerCase());
     }
 
-    function approveOrder(orderId) {
+    async function approveOrder(orderId) {
       const item = allOrders.find(o => o.order_id === orderId);
       if (!item) return;
 
-      if (!confirm(`Approve payment for ${item.user_name} (${item.plan})?\n\nThis will automatically grant them Chai Ultra Premium.`)) {
+      if (!confirm(`Approve payment for ${item.user_name} (${item.plan})?\n\nThis will automatically grant them Chai Ultra Premium & Unlimited messages in the app.`)) {
         return;
       }
 
       item.status = 'approved';
       item.rejection_reason = null;
-      saveOrders();
+      await saveOrdersCloud();
+
+      // Sync individual user approval key for the Android app
+      if (item.user_email) {
+        const cleanEmail = item.user_email.toLowerCase().replace(/@/g, '_at_').replace(/\./g, '_dot_').replace(/\+/g, '_plus_');
+        try {
+          await fetch(`${BUCKET_URL}/user_${cleanEmail}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'approved',
+              is_premium: true,
+              user_email: item.user_email,
+              order_id: item.order_id
+            })
+          });
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
       render();
-      showToast(`Approved! ${item.user_name} is now Premium.`, 'success');
+      showToast(`Approved! ${item.user_name} is now Ultra Premium (Unlimited).`, 'success');
     }
 
-    function rejectOrder(orderId) {
+    async function rejectOrder(orderId) {
       const item = allOrders.find(o => o.order_id === orderId);
       if (!item) return;
 
-      const reason = prompt('Enter rejection reason (e.g. TrxID not matched / insufficient amount):', 'Invalid Transaction ID');
+      const reason = prompt('Enter rejection reason (e.g. TrxID not matched / invalid):', 'Invalid Transaction ID');
       if (reason === null) return;
 
       item.status = 'rejected';
       item.rejection_reason = reason || 'Payment could not be verified.';
-      saveOrders();
+      await saveOrdersCloud();
+
+      if (item.user_email) {
+        const cleanEmail = item.user_email.toLowerCase().replace(/@/g, '_at_').replace(/\./g, '_dot_').replace(/\+/g, '_plus_');
+        try {
+          await fetch(`${BUCKET_URL}/user_${cleanEmail}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'rejected',
+              is_premium: false,
+              user_email: item.user_email,
+              rejection_reason: item.rejection_reason
+            })
+          });
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
       render();
       showToast(`Order marked as Rejected.`, 'error');
     }
@@ -404,7 +464,7 @@
       document.getElementById('new-amount').value = plan.includes('2000') ? '2000' : '230';
     }
 
-    function submitNewOrder(e) {
+    async function submitNewOrder(e) {
       e.preventDefault();
       const newOrder = {
         order_id: 'ord-' + Date.now().toString().slice(-5),
@@ -421,7 +481,7 @@
       };
 
       allOrders.unshift(newOrder);
-      saveOrders();
+      await saveOrdersCloud();
       closeNewOrderModal();
       setFilter('pending');
       showToast('New payment request submitted!', 'success');
@@ -483,7 +543,7 @@
 
       list.forEach(order => {
         const isPending = order.status === 'pending';
-        const isBkash = order.payment_method.toLowerCase().includes('bkash');
+        const isBkash = (order.payment_method || '').toLowerCase().includes('bkash');
 
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-[#151520] transition duration-150';
@@ -522,7 +582,7 @@
           <td class="py-4 px-4">
             ${
               order.status === 'pending'
-                ? '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">PENDING</span>'
+                ? '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 animate-pulse">PENDING</span>'
                 : order.status === 'approved'
                 ? '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">APPROVED ✓</span>'
                 : '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">REJECTED ✕</span>'
@@ -560,6 +620,8 @@
     }
 
     loadOrders();
+    // Poll cloud every 4 seconds for immediate incoming orders from the Android app!
+    setInterval(fetchCloudOrders, 4000);
     lucide.createIcons();
   </script>
 </body>
