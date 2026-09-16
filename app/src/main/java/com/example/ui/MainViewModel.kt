@@ -95,12 +95,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var approvalJob: Job? = null
 
+    val paymentSettings = MutableStateFlow(com.example.data.payment.PaymentSettings())
+
     private val _streamingBotReply = MutableStateFlow<StreamingReply?>(null)
     val streamingBotReply: StateFlow<StreamingReply?> = _streamingBotReply.asStateFlow()
 
     init {
         viewModelScope.launch {
             repository.seedInitialDataIfEmpty()
+            // Fetch live payment settings from cloud
+            paymentSettings.value = PaymentSyncManager.fetchPaymentSettings(getApplication())
             // Sync default/current user to cloud registry
             val current = userAccount.value
             PaymentSyncManager.syncUserRegistration(
@@ -109,6 +113,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 email = current.email,
                 provider = current.provider
             )
+            // Immediately start listening for admin changes from cloud
+            startApprovalCheckLoop(current.email)
         }
     }
 
@@ -312,15 +318,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         piecesCount.value += amount
     }
 
+    fun refreshPaymentSettings() {
+        viewModelScope.launch {
+            paymentSettings.value = PaymentSyncManager.fetchPaymentSettings(getApplication())
+        }
+    }
+
     fun buyPremium(
-        plan: String = "Weekly (230 Taka)",
+        plan: String = "Weekly",
         paymentMethod: String = "bKash",
         senderNumber: String = "",
-        trxId: String = ""
+        trxId: String = "",
+        amount: String = "",
+        screenshotNote: String = ""
     ) {
         val email = userAccount.value.email
         val name = userAccount.value.name
-        val amount = if (plan.contains("2000")) "2000.00" else "230.00"
+        val resolvedAmount = if (amount.isNotBlank()) {
+            amount
+        } else if (paymentMethod.contains("Crypto", ignoreCase = true) || paymentMethod.contains("USDT", ignoreCase = true)) {
+            if (plan.contains("Yearly", ignoreCase = true) || plan.contains("18")) "$18" else "$2"
+        } else {
+            if (plan.contains("2000") || plan.contains("Yearly", ignoreCase = true)) "৳2000" else "৳230"
+        }
 
         // Submit order to cloud so admin panel receives it immediately!
         viewModelScope.launch {
@@ -332,7 +352,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 senderNumber = senderNumber,
                 trxId = trxId,
                 plan = plan,
-                amount = amount
+                amount = resolvedAmount,
+                screenshotNote = screenshotNote
             )
             // Continuously listen for admin approval
             startApprovalCheckLoop(email)

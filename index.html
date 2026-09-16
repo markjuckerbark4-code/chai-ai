@@ -36,9 +36,11 @@
               Admin Portal
             </span>
           </div>
-          <div class="flex items-center gap-2 text-[11px] text-gray-400">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Cloud KVDB Live Sync &bull; Vercel Ready</span>
+          <div class="flex items-center gap-2 text-[11px]">
+            <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="cloud-status-text" class="text-emerald-400 font-semibold">Cloud Live Sync: Active</span>
+            <span class="text-gray-600">&bull;</span>
+            <span id="cloud-last-sync" class="text-gray-400">Just now</span>
           </div>
         </div>
       </div>
@@ -122,6 +124,15 @@
       >
         <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
         <span>Analytics</span>
+      </button>
+
+      <button
+        onclick="switchActiveTab('settings')"
+        id="nav-tab-settings"
+        class="px-4 py-2 rounded-xl text-xs font-medium text-gray-400 hover:text-gray-200 hover:bg-[#151520] transition flex items-center gap-2 border border-transparent"
+      >
+        <i data-lucide="wallet" class="w-4 h-4"></i>
+        <span>Payment Settings</span>
       </button>
 
       <button
@@ -513,6 +524,161 @@
       </div>
     </section>
 
+    <!-- ============================================================ -->
+    <!-- TAB 5: PAYMENT SETTINGS (পেমেন্ট নম্বর ও ক্রিপ্টো অ্যাড্রেস)       -->
+    <!-- ============================================================ -->
+    <section id="view-settings" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Card 1: bKash & Nagad Payment Settings -->
+        <div class="bg-[#12121A] border border-[#20202E] rounded-2xl p-6 space-y-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400">
+              <i data-lucide="smartphone" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-white">bKash & Nagad সেটিংস</h3>
+              <p class="text-xs text-gray-400">অ্যাপে যে নম্বরে ব্যবহারকারীরা Send Money করবে তা পরিবর্তন করুন।</p>
+            </div>
+          </div>
+
+          <div class="space-y-3 pt-2">
+            <div>
+              <label class="block text-xs font-bold text-pink-400 mb-1 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-pink-500"></span> bKash Personal Number
+              </label>
+              <input
+                id="setting-bkash-number"
+                type="text"
+                value="01750721835"
+                class="w-full px-3.5 py-2.5 rounded-xl bg-[#09090F] border border-[#252538] text-white text-xs outline-none focus:border-pink-500 font-mono tracking-wider"
+                placeholder="e.g. 01750721835"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-orange-400 mb-1 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-orange-500"></span> Nagad Personal Number
+              </label>
+              <input
+                id="setting-nagad-number"
+                type="text"
+                value="01750721835"
+                class="w-full px-3.5 py-2.5 rounded-xl bg-[#09090F] border border-[#252538] text-white text-xs outline-none focus:border-orange-500 font-mono tracking-wider"
+                placeholder="e.g. 01750721835"
+              />
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 pt-1">
+              <div>
+                <label class="block text-xs font-bold text-gray-300 mb-1">BDT Weekly Price (৳)</label>
+                <input
+                  id="setting-bdt-weekly"
+                  type="text"
+                  value="230"
+                  class="w-full px-3.5 py-2.5 rounded-xl bg-[#09090F] border border-[#252538] text-white text-xs outline-none focus:border-red-500 font-semibold"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-300 mb-1">BDT Yearly Price (৳)</label>
+                <input
+                  id="setting-bdt-yearly"
+                  type="text"
+                  value="2000"
+                  class="w-full px-3.5 py-2.5 rounded-xl bg-[#09090F] border border-[#252538] text-white text-xs outline-none focus:border-red-500 font-semibold"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Crypto Payment Settings (Polygon USDT) -->
+        <div class="bg-[#12121A] border border-[#20202E] rounded-2xl p-6 space-y-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+              <i data-lucide="coins" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-white">Crypto Payment সেটিংস (USDT)</h3>
+              <p class="text-xs text-gray-400">Polygon নেটওয়ার্কের USDT ওয়ালেট অ্যাড্রেস ও ডলার রেট সেট করুন।</p>
+            </div>
+          </div>
+
+          <div class="space-y-3 pt-2">
+            <div>
+              <label class="block text-xs font-bold text-purple-400 mb-1 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-purple-500"></span> USDT Deposit Address (Polygon)
+              </label>
+              <input
+                id="setting-crypto-address"
+                type="text"
+                value="0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+                class="w-full px-3.5 py-2.5 rounded-xl bg-[#09090F] border border-[#252538] text-emerald-400 text-xs outline-none focus:border-purple-500 font-mono"
+                placeholder="0x..."
+              />
+              <p class="text-[10px] text-gray-500 mt-1">Binance, Bybit বা Bitget এর Polygon (MATIC/POL) USDT ডিপোজিট অ্যাড্রেস।</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-gray-300 mb-1">Crypto Network</label>
+                <input
+                  id="setting-crypto-network"
+                  type="text"
+                  value="Polygon (USDT)"
+                  class="w-full px-3.5 py-2.5 rounded-xl bg-[#09090F] border border-[#252538] text-white text-xs outline-none focus:border-purple-500 font-medium"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-300 mb-1">Supported Exchanges</label>
+                <input
+                  id="setting-crypto-wallets"
+                  type="text"
+                  value="Binance, Bybit, Bitget"
+                  class="w-full px-3.5 py-2.5 rounded-xl bg-[#09090F] border border-[#252538] text-white text-xs outline-none focus:border-purple-500 font-medium"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-emerald-400 mb-1">Crypto Weekly Price</label>
+                <input
+                  id="setting-crypto-weekly"
+                  type="text"
+                  value="$2"
+                  class="w-full px-3.5 py-2.5 rounded-xl bg-[#09090F] border border-[#252538] text-emerald-400 text-xs outline-none focus:border-emerald-500 font-bold"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-emerald-400 mb-1">Crypto Yearly Price</label>
+                <input
+                  id="setting-crypto-yearly"
+                  type="text"
+                  value="$18"
+                  class="w-full px-3.5 py-2.5 rounded-xl bg-[#09090F] border border-[#252538] text-emerald-400 text-xs outline-none focus:border-emerald-500 font-bold"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Button Bar -->
+      <div class="bg-[#12121A] border border-[#20202E] rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div class="flex items-center gap-2 text-xs text-gray-400">
+          <i data-lucide="info" class="w-4 h-4 text-amber-400"></i>
+          <span>Save বাটনে চাপ দিলে অ্যাপে তাৎক্ষণিকভাবে নতুন পেমেন্ট নম্বর ও ক্রিপ্টো অ্যাড্রেস কার্যকর হবে।</span>
+        </div>
+        <button
+          onclick="savePaymentSettingsToCloud()"
+          class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white font-extrabold text-xs shadow-lg shadow-red-950/40 transition flex items-center gap-2"
+        >
+          <i data-lucide="save" class="w-4 h-4"></i>
+          <span>Save All Payment Settings</span>
+        </button>
+      </div>
+    </section>
+
   </main>
 
   <!-- Footer -->
@@ -768,7 +934,16 @@
 
   <!-- Javascript Logic -->
   <script>
-    const BUCKET_URL = 'https://kvdb.io/ChaiAiApp_7v9x2m';
+    // Live Cloud Endpoints for Chai AI
+    const CLOUD_API_BASE = 'https://api.restful-api.dev/objects';
+    const USERS_OBJ_ID = 'ff808181a09d98f701a0a95c8c431879';
+    const ORDERS_OBJ_ID = 'ff808181a09d98f701a0a95c8cfa187a';
+    const SETTINGS_OBJ_ID = 'ff808181a09d98f701a0a95c8d83187c';
+
+    const USERS_URL = `${CLOUD_API_BASE}/${USERS_OBJ_ID}`;
+    const ORDERS_URL = `${CLOUD_API_BASE}/${ORDERS_OBJ_ID}`;
+    const SETTINGS_URL = `${CLOUD_API_BASE}/${SETTINGS_OBJ_ID}`;
+
     const ORDERS_STORAGE_KEY = 'chai_admin_orders_v2';
     const USERS_STORAGE_KEY = 'chai_admin_users_v2';
 
@@ -839,6 +1014,24 @@
       return (email || '').toLowerCase().replace(/@/g, '_at_').replace(/\./g, '_dot_').replace(/\+/g, '_plus_');
     }
 
+    function updateCloudStatusBadge(isConnected, label) {
+      const dot = document.getElementById('cloud-status-dot');
+      const text = document.getElementById('cloud-status-text');
+      const lastSync = document.getElementById('cloud-last-sync');
+      if (!dot || !text) return;
+
+      if (isConnected) {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+        text.className = 'text-emerald-400 font-semibold';
+        text.innerText = label || 'Cloud Live Sync: Active';
+        if (lastSync) lastSync.innerText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      } else {
+        dot.className = 'w-2 h-2 rounded-full bg-amber-400';
+        text.className = 'text-amber-400 font-semibold';
+        text.innerText = label || 'Offline / Local Cache';
+      }
+    }
+
     // App Initialization
     window.addEventListener('DOMContentLoaded', () => {
       loadInitialData();
@@ -862,41 +1055,108 @@
 
     async function fetchCloudData() {
       try {
-        // 1. Fetch Orders from KVDB
-        const ordRes = await fetch(`${BUCKET_URL}/orders`, { cache: 'no-store' });
-        if (ordRes.ok) {
-          const cloudOrders = await ordRes.json();
-          if (Array.isArray(cloudOrders) && cloudOrders.length > 0) {
-            allOrders = cloudOrders;
-            localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(allOrders));
-          }
-        }
-
-        // 2. Fetch Users from KVDB
-        const usrRes = await fetch(`${BUCKET_URL}/users`, { cache: 'no-store' });
+        // 1. Fetch Users
+        const usrRes = await fetch(USERS_URL, { cache: 'no-store' });
         if (usrRes.ok) {
-          const cloudUsers = await usrRes.json();
-          if (Array.isArray(cloudUsers) && cloudUsers.length > 0) {
-            allUsers = cloudUsers;
+          const usrJson = await usrRes.json();
+          const remoteUsers = (usrJson.data && Array.isArray(usrJson.data.users)) ? usrJson.data.users : [];
+          if (remoteUsers.length > 0) {
+            allUsers = remoteUsers;
             localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
           }
         }
 
+        // 2. Fetch Orders
+        const ordRes = await fetch(ORDERS_URL, { cache: 'no-store' });
+        if (ordRes.ok) {
+          const ordJson = await ordRes.json();
+          const remoteOrders = (ordJson.data && Array.isArray(ordJson.data.orders)) ? ordJson.data.orders : [];
+          if (remoteOrders.length > 0) {
+            allOrders = remoteOrders;
+            localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(allOrders));
+          }
+        }
+
+        // 3. Fetch Settings / Notice & Payment Numbers
+        const setRes = await fetch(SETTINGS_URL, { cache: 'no-store' });
+        if (setRes.ok) {
+          const setJson = await setRes.json();
+          if (setJson.data) {
+            const d = setJson.data;
+            const fillIfIdle = (id, val) => {
+              const el = document.getElementById(id);
+              if (el && val && document.activeElement !== el) el.value = val;
+            };
+            fillIfIdle('server-notice-input', d.notice);
+            fillIfIdle('setting-bkash-number', d.bkash_number);
+            fillIfIdle('setting-nagad-number', d.nagad_number);
+            fillIfIdle('setting-bdt-weekly', d.bdt_weekly_price);
+            fillIfIdle('setting-bdt-yearly', d.bdt_yearly_price);
+            fillIfIdle('setting-crypto-address', d.crypto_address);
+            fillIfIdle('setting-crypto-network', d.crypto_network);
+            fillIfIdle('setting-crypto-wallets', d.crypto_wallets);
+            fillIfIdle('setting-crypto-weekly', d.crypto_weekly_price);
+            fillIfIdle('setting-crypto-yearly', d.crypto_yearly_price);
+          }
+        }
+
+        updateCloudStatusBadge(true, 'Cloud Live Sync: Active');
         renderAllViews();
       } catch (err) {
-        // offline or network error fallback
+        console.warn('Fetch cloud fallback:', err);
+        updateCloudStatusBadge(false, 'Offline / Cache');
       }
     }
 
-    async function postDataToCloud(endpoint, data) {
+    async function saveUsersToCloud() {
       try {
-        await fetch(`${BUCKET_URL}/${endpoint}`, {
-          method: 'POST',
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
+        updateCloudStatusBadge(true, 'Syncing Users...');
+        const res = await fetch(USERS_URL, {
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
+          body: JSON.stringify({
+            name: 'chai_ai_users',
+            data: { users: allUsers }
+          })
         });
+        if (res.ok) {
+          updateCloudStatusBadge(true, 'Cloud Live Sync: Active');
+          return true;
+        } else {
+          updateCloudStatusBadge(false, 'Sync Warning');
+          return false;
+        }
       } catch (e) {
-        console.error('Cloud save error:', e);
+        console.error('Save users error:', e);
+        updateCloudStatusBadge(false, 'Offline Saved');
+        return false;
+      }
+    }
+
+    async function saveOrdersToCloud() {
+      try {
+        localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(allOrders));
+        updateCloudStatusBadge(true, 'Syncing Orders...');
+        const res = await fetch(ORDERS_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: 'chai_ai_orders',
+            data: { orders: allOrders }
+          })
+        });
+        if (res.ok) {
+          updateCloudStatusBadge(true, 'Cloud Live Sync: Active');
+          return true;
+        } else {
+          updateCloudStatusBadge(false, 'Sync Warning');
+          return false;
+        }
+      } catch (e) {
+        console.error('Save orders error:', e);
+        updateCloudStatusBadge(false, 'Offline Saved');
+        return false;
       }
     }
 
@@ -913,9 +1173,10 @@
     // ----------------------------------------------------
     function switchActiveTab(tabName) {
       currentTab = tabName;
-      ['orders', 'users', 'analytics', 'notice'].forEach(t => {
+      ['orders', 'users', 'analytics', 'settings', 'notice'].forEach(t => {
         const viewEl = document.getElementById(`view-${t}`);
         const tabBtn = document.getElementById(`nav-tab-${t}`);
+        if (!viewEl || !tabBtn) return;
         if (t === tabName) {
           viewEl.classList.remove('hidden');
           tabBtn.className = 'px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition bg-red-600/15 text-red-400 border border-red-500/30';
@@ -1009,14 +1270,28 @@
           `;
         }
 
+        let methodBadge = '';
+        const pm = (ord.payment_method || 'bKash').toLowerCase();
+        if (pm.includes('crypto') || pm.includes('usdt') || pm.includes('polygon')) {
+          methodBadge = '<span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30"><i data-lucide="coins" class="w-3 h-3"></i> USDT (Polygon)</span>';
+        } else if (pm.includes('nagad')) {
+          methodBadge = '<span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 font-bold border border-orange-500/30">Nagad</span>';
+        } else {
+          methodBadge = '<span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 font-bold border border-pink-500/30">bKash</span>';
+        }
+
+        const proofNote = ord.screenshot_note ? `<div class="text-emerald-400 text-[10px] mt-0.5 font-medium flex items-center gap-1"><i data-lucide="image" class="w-3 h-3"></i> ${ord.screenshot_note}</div>` : '';
+        const amtFormatted = String(ord.amount || '').includes('$') ? ord.amount : `৳ ${parseFloat(ord.amount || 0).toLocaleString()}`;
+
         tr.innerHTML = `
           <td class="py-4 px-5">
             <div class="font-bold text-white">${ord.user_name || 'Anonymous User'}</div>
             <div class="text-gray-400 text-[11px]">${ord.user_email || 'No email provided'}</div>
           </td>
           <td class="py-4 px-4">
-            <div class="font-semibold text-gray-200">${ord.payment_method || 'bKash'}</div>
-            <div class="text-gray-400 text-[11px] font-mono">${ord.sender_number || 'N/A'}</div>
+            <div>${methodBadge}</div>
+            <div class="text-gray-400 text-[11px] font-mono mt-1">${ord.sender_number || 'N/A'}</div>
+            ${proofNote}
           </td>
           <td class="py-4 px-4">
             <div class="font-mono font-bold text-amber-400 text-xs flex items-center gap-1.5">
@@ -1027,7 +1302,7 @@
             </div>
           </td>
           <td class="py-4 px-4">
-            <div class="font-bold text-white">৳ ${parseFloat(ord.amount || 0).toLocaleString()}</div>
+            <div class="font-bold text-white">${amtFormatted}</div>
             <div class="text-[11px] text-gray-400">${ord.plan || 'Weekly Plan'}</div>
           </td>
           <td class="py-4 px-4">${statusBadge}</td>
@@ -1046,7 +1321,7 @@
       order.status = 'approved';
       order.approved_at = new Date().toISOString();
 
-      // Determine Tier: if amount >= 2000 or contains 'Yearly', ultra; else weekly premium (7 days)
+      // Determine Tier: if amount >= 1000 or contains 'Yearly', ultra (10 months); else weekly premium (7 days)
       const isUltra = (parseFloat(order.amount) >= 1000) || (order.plan && order.plan.toLowerCase().includes('year'));
       const tierCode = isUltra ? 'ultra' : 'premium';
       const days = isUltra ? 300 : 7; // 10 months or 7 days
@@ -1058,6 +1333,7 @@
         targetUser.tier = tierCode;
         targetUser.is_premium = true;
         targetUser.expiry_date = expiryDate;
+        targetUser.is_banned = false;
       } else {
         targetUser = {
           user_id: 'CHAI-' + Math.floor(100000 + Math.random() * 900000),
@@ -1073,32 +1349,15 @@
         allUsers.unshift(targetUser);
       }
 
-      // 1. Sync orders to cloud
+      // Update UI immediately
       localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(allOrders));
-      postDataToCloud('orders', allOrders);
-
-      // 2. Sync users to cloud
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
-      postDataToCloud('users', allUsers);
-
-      // 3. Update direct user key in cloud so app gets it in 3 seconds!
-      const userKey = 'user_' + cleanEmailKey(order.user_email);
-      const userStatusJson = {
-        user_id: targetUser.user_id,
-        name: targetUser.name,
-        email: targetUser.email,
-        status: 'approved',
-        order_id: order.order_id,
-        trx_id: order.trx_id,
-        is_premium: true,
-        tier: tierCode,
-        expiry_date: expiryDate,
-        is_banned: false
-      };
-      postDataToCloud(userKey, userStatusJson);
-
-      showToast(`অর্ডার অনুমোদিত হয়েছে! ${order.user_name} কে ${isUltra ? 'Ultra (১০ মাস)' : 'Premium (৭ দিন)'} প্রদান করা হয়েছে।`);
       renderAllViews();
+      showToast(`অর্ডার অনুমোদিত হয়েছে! ${order.user_name} কে ${isUltra ? 'Ultra (১০ মাস)' : 'Premium (৭ দিন)'} প্রদান করা হয়েছে।`);
+
+      // Sync to cloud
+      await saveOrdersToCloud();
+      await saveUsersToCloud();
     }
 
     async function rejectOrder(orderId) {
@@ -1107,17 +1366,11 @@
 
       order.status = 'rejected';
       localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(allOrders));
-      postDataToCloud('orders', allOrders);
-
-      const userKey = 'user_' + cleanEmailKey(order.user_email);
-      postDataToCloud(userKey, {
-        status: 'rejected',
-        is_premium: false,
-        tier: 'none'
-      });
-
-      showToast('অর্ডার বাতিল (Rejected) করা হয়েছে।', 'error');
       renderAllViews();
+      showToast('অর্ডার বাতিল (Rejected) করা হয়েছে।', 'error');
+
+      // Sync to cloud
+      await saveOrdersToCloud();
     }
 
     // ----------------------------------------------------
@@ -1265,25 +1518,15 @@
         user.expiry_date = new Date(Date.now() + 1000 * 60 * 60 * 24 * 300).toISOString();
       }
 
-      // Save to localStorage & Cloud
+      // 1. Immediately update UI
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
-      postDataToCloud('users', allUsers);
-
-      const userKey = 'user_' + cleanEmailKey(email);
-      postDataToCloud(userKey, {
-        user_id: user.user_id,
-        name: user.name,
-        email: user.email,
-        status: user.is_premium ? 'approved' : 'none',
-        is_premium: user.is_premium,
-        tier: user.tier,
-        expiry_date: user.expiry_date,
-        is_banned: user.is_banned
-      });
+      renderAllViews();
 
       const tierBangla = newTier === 'ultra' ? 'Ultra (১০ মাস আনলিমিটেড)' : (newTier === 'premium' ? 'Premium (৭ দিন আনলিমিটেড)' : 'Non-premium (ফ্রি)');
       showToast(`${user.name} এর জন্য ${tierBangla} সক্রিয় করা হয়েছে!`);
-      renderAllViews();
+
+      // 2. Sync to Cloud
+      await saveUsersToCloud();
     }
 
     async function toggleUserBanDirectly(email) {
@@ -1292,30 +1535,23 @@
 
       user.is_banned = !user.is_banned;
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
-      postDataToCloud('users', allUsers);
-
-      const userKey = 'user_' + cleanEmailKey(email);
-      postDataToCloud(userKey, {
-        user_id: user.user_id,
-        name: user.name,
-        email: user.email,
-        is_banned: user.is_banned,
-        is_premium: user.is_premium,
-        tier: user.tier,
-        expiry_date: user.expiry_date
-      });
+      renderAllViews();
 
       showToast(`${user.name} ${user.is_banned ? 'স্থগিত (Banned)' : 'সক্রিয় (Unbanned)'} করা হয়েছে!`);
-      renderAllViews();
+
+      // Sync to Cloud
+      await saveUsersToCloud();
     }
 
     async function deleteUserDirectly(email) {
       if (!confirm(`Are you sure you want to remove user ${email}?`)) return;
       allUsers = allUsers.filter(u => u.email.toLowerCase() !== email.toLowerCase());
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
-      postDataToCloud('users', allUsers);
-      showToast('ইউজার ডাটাবেজ থেকে রিমুভ করা হয়েছে।');
       renderAllViews();
+      showToast('ইউজার ডাটাবেজ থেকে রিমুভ করা হয়েছে।');
+
+      // Sync to Cloud
+      await saveUsersToCloud();
     }
 
     // ----------------------------------------------------
@@ -1438,6 +1674,10 @@
 
     async function saveUserDetailsChanges() {
       if (!inspectedUser) return;
+      const user = allUsers.find(u => u.email.toLowerCase() === inspectedUser.email.toLowerCase());
+      if (user) {
+        user.is_banned = inspectedUser.is_banned;
+      }
       await changeUserTierDirectly(inspectedUser.email, modalSelectedTier);
       closeUserDetailsModal();
     }
@@ -1543,12 +1783,24 @@
       const approvedCount = allOrders.filter(o => o.status === 'approved').length;
       const rejectedCount = allOrders.filter(o => o.status === 'rejected').length;
 
-      let totalRevenue = 0;
-      allOrders.filter(o => o.status === 'approved').forEach(o => totalRevenue += (parseFloat(o.amount) || 0));
+      let totalBdt = 0;
+      let totalUsd = 0;
+      allOrders.filter(o => o.status === 'approved').forEach(o => {
+        const amtStr = String(o.amount || '');
+        if (amtStr.includes('$')) {
+          totalUsd += parseFloat(amtStr.replace('$', '')) || 0;
+        } else if (o.payment_method && (o.payment_method.toLowerCase().includes('crypto') || o.payment_method.toLowerCase().includes('usdt'))) {
+          totalUsd += parseFloat(amtStr) || 0;
+        } else {
+          totalBdt += parseFloat(amtStr) || 0;
+        }
+      });
+
+      const revenueText = totalUsd > 0 ? `৳ ${totalBdt.toLocaleString()} + $${totalUsd}` : `৳ ${totalBdt.toLocaleString()}`;
 
       document.getElementById('stat-pending').innerText = pendingCount;
       document.getElementById('stat-approved').innerText = approvedCount;
-      document.getElementById('stat-revenue').innerText = `৳ ${totalRevenue.toLocaleString()}`;
+      document.getElementById('stat-revenue').innerText = revenueText;
       document.getElementById('stat-rejected').innerText = rejectedCount;
 
       document.getElementById('badge-pending-orders').innerText = pendingCount;
@@ -1556,14 +1808,65 @@
     }
 
     // ----------------------------------------------------
+    // PAYMENT SETTINGS LOGIC (bKash, Nagad, Crypto)
+    // ----------------------------------------------------
+    async function savePaymentSettingsToCloud() {
+      const bkashNum = document.getElementById('setting-bkash-number')?.value.trim() || '01750721835';
+      const nagadNum = document.getElementById('setting-nagad-number')?.value.trim() || '01750721835';
+      const bdtWeekly = document.getElementById('setting-bdt-weekly')?.value.trim() || '230';
+      const bdtYearly = document.getElementById('setting-bdt-yearly')?.value.trim() || '2000';
+      const cryptoAddr = document.getElementById('setting-crypto-address')?.value.trim() || '0x742d35Cc6634C0532925a3b844Bc454e4438f44e';
+      const cryptoNet = document.getElementById('setting-crypto-network')?.value.trim() || 'Polygon (USDT)';
+      const cryptoWallets = document.getElementById('setting-crypto-wallets')?.value.trim() || 'Binance, Bybit, Bitget';
+      const cryptoWeekly = document.getElementById('setting-crypto-weekly')?.value.trim() || '$2';
+      const cryptoYearly = document.getElementById('setting-crypto-yearly')?.value.trim() || '$18';
+      const noticeText = document.getElementById('server-notice-input')?.value.trim() || 'নোটিশ: ১ ঘণ্টা বা ২ ঘণ্টা একটানা ব্যবহারের পর ৩০ মিনিট কুল ডাউন থাকবে।';
+
+      try {
+        updateCloudStatusBadge(true, 'Syncing Payment Settings...');
+        const res = await fetch(SETTINGS_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: 'chai_ai_settings',
+            data: {
+              bkash_number: bkashNum,
+              nagad_number: nagadNum,
+              bdt_weekly_price: bdtWeekly,
+              bdt_yearly_price: bdtYearly,
+              crypto_address: cryptoAddr,
+              crypto_network: cryptoNet,
+              crypto_wallets: cryptoWallets,
+              crypto_weekly_price: cryptoWeekly,
+              crypto_yearly_price: cryptoYearly,
+              notice: noticeText,
+              updated_at: new Date().toISOString()
+            }
+          })
+        });
+        if (res.ok) {
+          updateCloudStatusBadge(true, 'Cloud Live Sync: Active');
+          showToast('পেমেন্ট ও ক্রিপ্টো সেটিংস ক্লাউডে সংরক্ষিত হয়েছে!');
+          return true;
+        } else {
+          showToast('সেটিংস সেভ করতে সমস্যা হয়েছে!', 'error');
+          return false;
+        }
+      } catch (e) {
+        console.error('Error saving settings:', e);
+        showToast('ক্লাউড কানেকশন এরর!', 'error');
+        return false;
+      }
+    }
+
+    // ----------------------------------------------------
     // NOTICE & COOLDOWN SETTINGS LOGIC
     // ----------------------------------------------------
     async function saveNoticeToCloud() {
-      const noticeText = document.getElementById('server-notice-input').value.trim();
-      if (!noticeText) return;
-
-      postDataToCloud('notice', { text: noticeText, updated_at: new Date().toISOString() });
-      showToast('সার্ভার নোটিশ ক্লাউডে ব্রডকাস্ট করা হয়েছে!');
+      const ok = await savePaymentSettingsToCloud();
+      if (ok) {
+        showToast('সার্ভার নোটিশ ও সেটিংস ক্লাউডে সংরক্ষিত হয়েছে!');
+      }
     }
 
     // ----------------------------------------------------
@@ -1604,7 +1907,6 @@
 
       allOrders.unshift(newOrder);
       localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(allOrders));
-      postDataToCloud('orders', allOrders);
 
       // Also ensure user is registered
       if (!allUsers.find(u => u.email.toLowerCase() === email.toLowerCase())) {
@@ -1620,12 +1922,14 @@
           created_at: new Date().toISOString()
         });
         localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
-        postDataToCloud('users', allUsers);
       }
 
       closeNewOrderModal();
       showToast('নতুন পেমেন্ট রিকোয়েস্ট তৈরি হয়েছে!');
       renderAllViews();
+
+      await saveOrdersToCloud();
+      await saveUsersToCloud();
     }
 
     function openNewUserModal() {
@@ -1665,28 +1969,17 @@
 
       allUsers.unshift(newUser);
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
-      postDataToCloud('users', allUsers);
-
-      const userKey = 'user_' + cleanEmailKey(email);
-      postDataToCloud(userKey, {
-        user_id: uid,
-        name: name,
-        email: email,
-        status: isPremium ? 'approved' : 'none',
-        is_premium: isPremium,
-        tier: tier,
-        expiry_date: expiryDate,
-        is_banned: false
-      });
-
       closeNewUserModal();
       showToast(`User ${name} created with ID ${uid}!`);
       renderAllViews();
+
+      await saveUsersToCloud();
     }
 
-    function refreshAllCloudData() {
-      fetchCloudData();
-      showToast('ক্লাউড ডাটা রিফ্রেশ করা হয়েছে!');
+    async function refreshAllCloudData() {
+      showToast('ক্লাউড ডাটা রিফ্রেশ করা হচ্ছে...');
+      await fetchCloudData();
+      showToast('ক্লাউড ডাটা সফলভাবে রিফ্রেশ হয়েছে!');
     }
 
     function copyText(text, label) {

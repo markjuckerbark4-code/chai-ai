@@ -25,8 +25,22 @@ data class PaymentOrder(
     val trxId: String,
     val plan: String,
     val amount: String,
+    val screenshotNote: String = "",
     val status: String = "pending",
     val createdAt: String = ""
+)
+
+data class PaymentSettings(
+    val bkashNumber: String = "01750721835",
+    val nagadNumber: String = "01750721835",
+    val cryptoAddress: String = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+    val cryptoNetwork: String = "Polygon (USDT)",
+    val cryptoWallets: String = "Binance, Bybit, Bitget",
+    val cryptoWeeklyPrice: String = "$2",
+    val cryptoYearlyPrice: String = "$18",
+    val bdtWeeklyPrice: String = "230",
+    val bdtYearlyPrice: String = "2000",
+    val notice: String = "নোটিশ: ১ ঘণ্টা বা ২ ঘণ্টা একটানা ব্যবহারের পর ৩০ মিনিট কুল ডাউন থাকবে।"
 )
 
 data class CloudUserStatus(
@@ -42,8 +56,17 @@ data class CloudUserStatus(
 
 object PaymentSyncManager {
     private const val TAG = "PaymentSyncManager"
-    private const val BUCKET_ID = "ChaiAiApp_7v9x2m"
-    private const val BASE_KV_URL = "https://kvdb.io/$BUCKET_ID"
+    
+    // Dedicated Cloud Storage Endpoints for Chai AI
+    private const val API_BASE = "https://api.restful-api.dev/objects"
+    private const val USERS_OBJ_ID = "ff808181a09d98f701a0a95c8c431879"
+    private const val ORDERS_OBJ_ID = "ff808181a09d98f701a0a95c8cfa187a"
+    private const val SETTINGS_OBJ_ID = "ff808181a09d98f701a0a95c8d83187c"
+
+    private const val USERS_URL = "$API_BASE/$USERS_OBJ_ID"
+    private const val ORDERS_URL = "$API_BASE/$ORDERS_OBJ_ID"
+    private const val SETTINGS_URL = "$API_BASE/$SETTINGS_OBJ_ID"
+
     private const val PREFS_NAME = "chai_payment_prefs"
     private const val KEY_LAST_STATUS = "key_last_payment_status"
 
@@ -58,8 +81,8 @@ object PaymentSyncManager {
     }
 
     /**
-     * Registers and syncs user to the Cloud KV database (/users and /user_{email})
-     * so that the Admin Panel immediately displays them in the Users list.
+     * Registers and syncs user to the Cloud database
+     * so that the Admin Panel immediately displays them in the Users list with their User ID.
      */
     suspend fun syncUserRegistration(
         userId: String,
@@ -69,78 +92,57 @@ object PaymentSyncManager {
     ) = withContext(Dispatchers.IO) {
         if (email.isBlank()) return@withContext
         try {
-            val userKey = "user_" + cleanEmailKey(email)
-            // Check existing user data if any
-            val existingData = getKvData("$BASE_KV_URL/$userKey")
-            var currentTier = "none"
-            var isBanned = false
-            var isPremium = false
-            var expiryDate: String? = null
-
-            if (existingData.isNotBlank()) {
-                val json = JSONObject(existingData)
-                currentTier = json.optString("tier", "none")
-                isBanned = json.optBoolean("is_banned", false)
-                isPremium = json.optBoolean("is_premium", false)
-                if (json.has("expiry_date") && !json.isNull("expiry_date")) {
-                    expiryDate = json.optString("expiry_date")
-                }
-            }
-
-            // 1. Post to user-specific key
-            val userObj = JSONObject().apply {
-                put("user_id", userId)
-                put("name", name)
-                put("email", email)
-                put("provider", provider)
-                put("tier", currentTier)
-                put("is_premium", isPremium)
-                put("is_banned", isBanned)
-                if (expiryDate != null) put("expiry_date", expiryDate)
-                put("last_active", getIsoDate())
-            }
-            postKvData("$BASE_KV_URL/$userKey", userObj.toString())
-
-            // 2. Add or update in /users array
-            val usersJson = getKvData("$BASE_KV_URL/users")
-            val usersArray = if (usersJson.isNotBlank() && usersJson.trim().startsWith("[")) {
-                JSONArray(usersJson)
+            val response = httpGet(USERS_URL)
+            val usersArray = if (response.isNotBlank()) {
+                val root = JSONObject(response)
+                val dataObj = root.optJSONObject("data") ?: root
+                dataObj.optJSONArray("users") ?: JSONArray()
             } else {
                 JSONArray()
             }
 
             var found = false
             for (i in 0 until usersArray.length()) {
-                val item = usersArray.optJSONObject(i) ?: continue
-                if (item.optString("email").equals(email, ignoreCase = true) ||
-                    item.optString("user_id").equals(userId, ignoreCase = true)) {
-                    item.put("name", name)
-                    item.put("provider", provider)
-                    item.put("user_id", userId)
-                    item.put("last_active", getIsoDate())
+                val u = usersArray.optJSONObject(i) ?: continue
+                val existingEmail = u.optString("email", "")
+                val existingUid = u.optString("user_id", "")
+                if (existingEmail.equals(email, ignoreCase = true) ||
+                    (userId.isNotBlank() && existingUid.equals(userId, ignoreCase = true))
+                ) {
+                    u.put("name", name)
+                    u.put("provider", provider)
+                    if (userId.isNotBlank()) u.put("user_id", userId)
+                    u.put("last_active", getIsoDate())
                     found = true
                     break
                 }
             }
 
             if (!found) {
-                val newUserJson = JSONObject().apply {
-                    put("user_id", userId)
+                val finalUid = if (userId.isNotBlank()) userId else "CHAI-${(100000..999999).random()}"
+                val newUser = JSONObject().apply {
+                    put("user_id", finalUid)
                     put("name", name)
                     put("email", email)
                     put("provider", provider)
-                    put("tier", currentTier)
-                    put("is_banned", isBanned)
-                    put("is_premium", isPremium)
-                    if (expiryDate != null) put("expiry_date", expiryDate)
+                    put("tier", "none")
+                    put("is_premium", false)
+                    put("is_banned", false)
+                    put("expiry_date", JSONObject.NULL)
                     put("created_at", getIsoDate())
                     put("last_active", getIsoDate())
                 }
-                usersArray.put(newUserJson)
+                usersArray.put(newUser)
             }
 
-            postKvData("$BASE_KV_URL/users", usersArray.toString())
-            Log.d(TAG, "User registered in cloud: $userId - $email")
+            val payload = JSONObject().apply {
+                put("name", "chai_ai_users")
+                put("data", JSONObject().apply {
+                    put("users", usersArray)
+                })
+            }
+            val ok = httpPut(USERS_URL, payload.toString())
+            Log.d(TAG, "User registration cloud sync: email=$email, success=$ok")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to sync user to cloud", e)
         }
@@ -155,55 +157,62 @@ object PaymentSyncManager {
         if (userEmail.isBlank()) return@withContext null
 
         try {
-            val userKey = "user_" + cleanEmailKey(userEmail)
-            val response = getKvData("$BASE_KV_URL/$userKey")
+            val response = httpGet(USERS_URL)
             if (response.isNotBlank()) {
-                val json = JSONObject(response)
-                val status = json.optString("status", "")
-                var isPremium = json.optBoolean("is_premium", false) || status.equals("approved", ignoreCase = true)
-                var tier = json.optString("tier", if (isPremium) "premium" else "none")
-                val isBanned = json.optBoolean("is_banned", false)
-                val userId = json.optString("user_id", "")
-                val name = json.optString("name", "")
-                val expiryDate = if (json.has("expiry_date") && !json.isNull("expiry_date")) {
-                    json.optString("expiry_date")
-                } else null
+                val root = JSONObject(response)
+                val dataObj = root.optJSONObject("data") ?: root
+                val usersArray = dataObj.optJSONArray("users") ?: JSONArray()
 
-                // Check if expiry date has passed
-                if (expiryDate != null && isPremium) {
-                    try {
-                        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
-                        sdf.timeZone = TimeZone.getTimeZone("UTC")
-                        val expiryTime = sdf.parse(expiryDate)?.time ?: Long.MAX_VALUE
-                        if (System.currentTimeMillis() > expiryTime) {
-                            // Expired!
-                            isPremium = false
-                            tier = "none"
+                for (i in 0 until usersArray.length()) {
+                    val u = usersArray.optJSONObject(i) ?: continue
+                    val email = u.optString("email", "")
+                    if (email.equals(userEmail, ignoreCase = true)) {
+                        val userId = u.optString("user_id", "")
+                        val name = u.optString("name", "")
+                        val isBanned = u.optBoolean("is_banned", false)
+                        var tier = u.optString("tier", "none").lowercase()
+                        var isPremium = u.optBoolean("is_premium", false) || tier == "premium" || tier == "ultra"
+                        val expiryDate = if (u.has("expiry_date") && !u.isNull("expiry_date")) {
+                            u.optString("expiry_date")
+                        } else null
+
+                        // Check if expiry date has passed
+                        if (expiryDate != null && isPremium) {
+                            try {
+                                val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+                                sdf.timeZone = TimeZone.getTimeZone("UTC")
+                                val expiryTime = sdf.parse(expiryDate)?.time ?: Long.MAX_VALUE
+                                if (System.currentTimeMillis() > expiryTime) {
+                                    // Expired!
+                                    isPremium = false
+                                    tier = "none"
+                                }
+                            } catch (e: Exception) {
+                                Log.d(TAG, "Expiry date parse error: $e")
+                            }
                         }
-                    } catch (e: Exception) {
-                        Log.d(TAG, "Expiry date parse error: $e")
+
+                        return@withContext CloudUserStatus(
+                            userId = userId,
+                            name = name,
+                            email = userEmail,
+                            tier = tier,
+                            isPremium = isPremium,
+                            isBanned = isBanned,
+                            expiryDate = expiryDate
+                        )
                     }
                 }
-
-                return@withContext CloudUserStatus(
-                    userId = userId,
-                    name = name,
-                    email = userEmail,
-                    tier = tier,
-                    isPremium = isPremium,
-                    isBanned = isBanned,
-                    expiryDate = expiryDate
-                )
             }
         } catch (e: Exception) {
-            Log.d(TAG, "Status check notice: ${e.message}")
+            Log.d(TAG, "fetchUserStatus error: ${e.message}")
         }
         null
     }
 
     /**
      * Submits a new payment order from the Android app to the shared cloud store
-     * so that the Vercel Admin Panel receives it immediately.
+     * so that the Admin Panel receives it immediately.
      */
     suspend fun submitOrder(
         context: Context,
@@ -213,7 +222,8 @@ object PaymentSyncManager {
         senderNumber: String,
         trxId: String,
         plan: String,
-        amount: String
+        amount: String,
+        screenshotNote: String = ""
     ): Result<PaymentOrder> = withContext(Dispatchers.IO) {
         try {
             val orderId = "ord-" + System.currentTimeMillis().toString().takeLast(6)
@@ -226,46 +236,49 @@ object PaymentSyncManager {
                 trxId = trxId.trim().uppercase(),
                 plan = plan,
                 amount = amount,
+                screenshotNote = screenshotNote,
                 status = "pending",
                 createdAt = getIsoDate()
             )
 
             // 1. Fetch current orders list
-            val existingOrders = fetchAllOrdersInternal().toMutableList()
-            // Add new order at the top
-            existingOrders.add(0, newOrder)
+            val response = httpGet(ORDERS_URL)
+            val existingOrdersArray = if (response.isNotBlank()) {
+                val root = JSONObject(response)
+                val dataObj = root.optJSONObject("data") ?: root
+                dataObj.optJSONArray("orders") ?: JSONArray()
+            } else {
+                JSONArray()
+            }
 
-            // Save updated orders to KV store
-            val ordersArray = JSONArray()
-            existingOrders.forEach { order ->
-                ordersArray.put(JSONObject().apply {
-                    put("order_id", order.orderId)
-                    put("user_name", order.userName)
-                    put("user_email", order.userEmail)
-                    put("payment_method", order.paymentMethod)
-                    put("sender_number", order.senderNumber)
-                    put("trx_id", order.trxId)
-                    put("plan", order.plan)
-                    put("amount", order.amount)
-                    put("status", order.status)
-                    put("created_at", order.createdAt)
+            // Prepend new order
+            val updatedOrdersArray = JSONArray()
+            updatedOrdersArray.put(JSONObject().apply {
+                put("order_id", newOrder.orderId)
+                put("user_name", newOrder.userName)
+                put("user_email", newOrder.userEmail)
+                put("payment_method", newOrder.paymentMethod)
+                put("sender_number", newOrder.senderNumber)
+                put("trx_id", newOrder.trxId)
+                put("plan", newOrder.plan)
+                put("amount", newOrder.amount)
+                put("screenshot_note", newOrder.screenshotNote)
+                put("status", newOrder.status)
+                put("created_at", newOrder.createdAt)
+            })
+
+            for (i in 0 until existingOrdersArray.length()) {
+                val item = existingOrdersArray.optJSONObject(i) ?: continue
+                updatedOrdersArray.put(item)
+            }
+
+            val payload = JSONObject().apply {
+                put("name", "chai_ai_orders")
+                put("data", JSONObject().apply {
+                    put("orders", updatedOrdersArray)
                 })
             }
-
-            postKvData("$BASE_KV_URL/orders", ordersArray.toString())
-
-            // 2. Set user specific status
-            val userKey = "user_" + cleanEmailKey(userEmail)
-            val userStatusJson = JSONObject().apply {
-                put("status", "pending")
-                put("order_id", orderId)
-                put("user_email", userEmail)
-                put("trx_id", trxId)
-                put("plan", plan)
-                put("amount", amount)
-                put("is_premium", false)
-            }
-            postKvData("$BASE_KV_URL/$userKey", userStatusJson.toString())
+            httpPut(ORDERS_URL, payload.toString())
 
             // Save locally in SharedPreferences
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -283,7 +296,7 @@ object PaymentSyncManager {
     }
 
     /**
-     * Checks if this user's payment has been approved by the Admin in the Vercel panel.
+     * Checks if this user's payment has been approved by the Admin.
      */
     suspend fun checkUserApprovalStatus(
         context: Context,
@@ -292,69 +305,98 @@ object PaymentSyncManager {
         if (userEmail.isBlank()) return@withContext false
 
         try {
-            val userKey = "user_" + cleanEmailKey(userEmail)
-            val response = getKvData("$BASE_KV_URL/$userKey")
-            if (response.isNotBlank()) {
-                val json = JSONObject(response)
-                val status = json.optString("status", "")
-                val isPremium = json.optBoolean("is_premium", false) || status.equals("approved", ignoreCase = true)
-                if (isPremium) {
-                    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                        .edit()
-                        .putString(KEY_LAST_STATUS, "approved")
-                        .putBoolean("is_premium", true)
-                        .apply()
-                    return@withContext true
-                }
+            val status = fetchUserStatus(userEmail)
+            if (status != null && status.isPremium) {
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_LAST_STATUS, "approved")
+                    .putBoolean("is_premium", true)
+                    .apply()
+                return@withContext true
             }
         } catch (e: Exception) {
-            Log.d(TAG, "Status check notice: ${e.message}")
+            Log.d(TAG, "checkUserApprovalStatus error: ${e.message}")
         }
         false
     }
 
-    private fun fetchAllOrdersInternal(): List<PaymentOrder> {
-        val list = mutableListOf<PaymentOrder>()
+    suspend fun fetchPaymentSettings(context: Context? = null): PaymentSettings = withContext(Dispatchers.IO) {
+        val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         try {
-            val response = getKvData("$BASE_KV_URL/orders")
+            val response = httpGet(SETTINGS_URL)
             if (response.isNotBlank()) {
-                val array = JSONArray(response)
-                for (i in 0 until array.length()) {
-                    val obj = array.getJSONObject(i)
-                    list.add(
-                        PaymentOrder(
-                            orderId = obj.optString("order_id"),
-                            userName = obj.optString("user_name"),
-                            userEmail = obj.optString("user_email"),
-                            paymentMethod = obj.optString("payment_method"),
-                            senderNumber = obj.optString("sender_number"),
-                            trxId = obj.optString("trx_id"),
-                            plan = obj.optString("plan"),
-                            amount = obj.optString("amount"),
-                            status = obj.optString("status", "pending"),
-                            createdAt = obj.optString("created_at")
-                        )
-                    )
-                }
+                val root = JSONObject(response)
+                val dataObj = root.optJSONObject("data") ?: root
+                val settings = PaymentSettings(
+                    bkashNumber = dataObj.optString("bkash_number", prefs?.getString("bkash_num", "01750721835") ?: "01750721835"),
+                    nagadNumber = dataObj.optString("nagad_number", prefs?.getString("nagad_num", "01750721835") ?: "01750721835"),
+                    cryptoAddress = dataObj.optString("crypto_address", prefs?.getString("crypto_addr", "0x742d35Cc6634C0532925a3b844Bc454e4438f44e") ?: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"),
+                    cryptoNetwork = dataObj.optString("crypto_network", "Polygon (USDT)"),
+                    cryptoWallets = dataObj.optString("crypto_wallets", "Binance, Bybit, Bitget"),
+                    cryptoWeeklyPrice = dataObj.optString("crypto_weekly_price", "$2"),
+                    cryptoYearlyPrice = dataObj.optString("crypto_yearly_price", "$18"),
+                    bdtWeeklyPrice = dataObj.optString("bdt_weekly_price", "230"),
+                    bdtYearlyPrice = dataObj.optString("bdt_yearly_price", "2000"),
+                    notice = dataObj.optString("notice", "নোটিশ: ১ ঘণ্টা বা ২ ঘণ্টা একটানা ব্যবহারের পর ৩০ মিনিট কুল ডাউন থাকবে।")
+                )
+                // Save cache
+                prefs?.edit()
+                    ?.putString("bkash_num", settings.bkashNumber)
+                    ?.putString("nagad_num", settings.nagadNumber)
+                    ?.putString("crypto_addr", settings.cryptoAddress)
+                    ?.putString("crypto_weekly", settings.cryptoWeeklyPrice)
+                    ?.putString("crypto_yearly", settings.cryptoYearlyPrice)
+                    ?.putString("bdt_weekly", settings.bdtWeeklyPrice)
+                    ?.putString("bdt_yearly", settings.bdtYearlyPrice)
+                    ?.putString("server_notice", settings.notice)
+                    ?.apply()
+                return@withContext settings
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching all orders", e)
+            Log.e(TAG, "Error fetching payment settings: ${e.message}")
         }
-        return list
+
+        PaymentSettings(
+            bkashNumber = prefs?.getString("bkash_num", "01750721835") ?: "01750721835",
+            nagadNumber = prefs?.getString("nagad_num", "01750721835") ?: "01750721835",
+            cryptoAddress = prefs?.getString("crypto_addr", "0x742d35Cc6634C0532925a3b844Bc454e4438f44e") ?: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+            cryptoNetwork = "Polygon (USDT)",
+            cryptoWallets = "Binance, Bybit, Bitget",
+            cryptoWeeklyPrice = prefs?.getString("crypto_weekly", "$2") ?: "$2",
+            cryptoYearlyPrice = prefs?.getString("crypto_yearly", "$18") ?: "$18",
+            bdtWeeklyPrice = prefs?.getString("bdt_weekly", "230") ?: "230",
+            bdtYearlyPrice = prefs?.getString("bdt_yearly", "2000") ?: "2000",
+            notice = prefs?.getString("server_notice", "নোটিশ: ১ ঘণ্টা বা ২ ঘণ্টা একটানা ব্যবহারের পর ৩০ মিনিট কুল ডাউন থাকবে।") ?: "নোটিশ: ১ ঘণ্টা বা ২ ঘণ্টা একটানা ব্যবহারের পর ৩০ মিনিট কুল ডাউন থাকবে।"
+        )
     }
 
-    private fun getKvData(urlString: String): String {
+    suspend fun fetchServerNotice(): String? = withContext(Dispatchers.IO) {
+        try {
+            val response = httpGet(SETTINGS_URL)
+            if (response.isNotBlank()) {
+                val root = JSONObject(response)
+                val dataObj = root.optJSONObject("data") ?: root
+                return@withContext dataObj.optString("notice", null)
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "fetchServerNotice error: ${e.message}")
+        }
+        null
+    }
+
+    private fun httpGet(urlString: String): String {
         var conn: HttpURLConnection? = null
         return try {
             val url = URL(urlString)
             conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 4000
-                readTimeout = 4000
+                connectTimeout = 5000
+                readTimeout = 5000
                 setRequestProperty("Accept", "application/json")
+                setRequestProperty("User-Agent", "ChaiAi-Android")
             }
             val responseCode = conn.responseCode
-            if (responseCode == HttpURLConnection.HTTP_OK) {
+            if (responseCode in 200..299) {
                 BufferedReader(InputStreamReader(conn.inputStream)).use { reader ->
                     reader.readText()
                 }
@@ -362,29 +404,34 @@ object PaymentSyncManager {
                 ""
             }
         } catch (e: Exception) {
+            Log.e(TAG, "httpGet error: $urlString, ${e.message}")
             ""
         } finally {
             conn?.disconnect()
         }
     }
 
-    private fun postKvData(urlString: String, payload: String): Boolean {
+    private fun httpPut(urlString: String, payload: String): Boolean {
         var conn: HttpURLConnection? = null
         return try {
             val url = URL(urlString)
             conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
+                requestMethod = "PUT"
                 doOutput = true
-                connectTimeout = 4000
-                readTimeout = 4000
+                connectTimeout = 5000
+                readTimeout = 5000
                 setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("User-Agent", "ChaiAi-Android")
             }
             OutputStreamWriter(conn.outputStream).use { writer ->
                 writer.write(payload)
                 writer.flush()
             }
-            conn.responseCode in 200..299
+            val code = conn.responseCode
+            code in 200..299
         } catch (e: Exception) {
+            Log.e(TAG, "httpPut error: $urlString, ${e.message}")
             false
         } finally {
             conn?.disconnect()

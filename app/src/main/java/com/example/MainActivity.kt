@@ -169,10 +169,12 @@ fun ChaiApp(viewModel: MainViewModel = viewModel()) {
 
         // Subscription Sheet Dialog
         if (isSubscriptionSheetVisible) {
+            val paymentSettings by viewModel.paymentSettings.collectAsState()
             SubscriptionDialog(
+                paymentSettings = paymentSettings,
                 onDismiss = { viewModel.showSubscriptionSheet(false) },
-                onBuyPremium = { plan, method, senderNumber, trxId ->
-                    viewModel.buyPremium(plan, method, senderNumber, trxId)
+                onBuyPremium = { plan, method, senderNumber, trxId, amount, screenshotNote ->
+                    viewModel.buyPremium(plan, method, senderNumber, trxId, amount, screenshotNote)
                 }
             )
         }
