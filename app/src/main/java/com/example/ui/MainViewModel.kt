@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.database.ChaiDatabase
@@ -102,21 +103,101 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _streamingBotReply = MutableStateFlow<StreamingReply?>(null)
     val streamingBotReply: StateFlow<StreamingReply?> = _streamingBotReply.asStateFlow()
 
+    companion object {
+        private const val AUTH_PREFS = "chai_auth_prefs"
+        private const val KEY_IS_LOGGED_IN = "key_is_logged_in"
+        private const val KEY_USER_NAME = "key_user_name"
+        private const val KEY_USER_EMAIL = "key_user_email"
+        private const val KEY_USER_PROVIDER = "key_user_provider"
+        private const val KEY_USER_ID = "key_user_id"
+        private const val KEY_MEMBER_TIER = "key_member_tier"
+        private const val KEY_AVATAR_INITIAL = "key_avatar_initial"
+        private const val KEY_JOIN_DATE = "key_join_date"
+        private const val KEY_IS_PREMIUM = "key_is_premium"
+        private const val KEY_TIER = "key_tier"
+        private const val KEY_IS_BANNED = "key_is_banned"
+        private const val KEY_EXPIRY_DATE = "key_expiry_date"
+    }
+
     init {
+        restoreUserSession()
         viewModelScope.launch {
             repository.seedInitialDataIfEmpty()
             // Fetch live payment settings from cloud
             paymentSettings.value = PaymentSyncManager.fetchPaymentSettings(getApplication())
-            // Sync default/current user to cloud registry
+            // If logged in, sync current user to cloud registry and check status
             val current = userAccount.value
-            PaymentSyncManager.syncUserRegistration(
-                userId = current.userId,
-                name = current.name,
-                email = current.email,
-                provider = current.provider
-            )
-            // Start continuous real-time status sync with Admin Panel
-            startApprovalCheckLoop(current.email)
+            if (isLoggedIn.value && current.email.isNotBlank()) {
+                PaymentSyncManager.syncUserRegistration(
+                    userId = current.userId,
+                    name = current.name,
+                    email = current.email,
+                    provider = current.provider
+                )
+                checkUserStatusOnce(current.email)
+            }
+        }
+    }
+
+    private fun restoreUserSession() {
+        try {
+            val prefs = getApplication<Application>().getSharedPreferences(AUTH_PREFS, Context.MODE_PRIVATE)
+            val savedLoggedIn = prefs.getBoolean(KEY_IS_LOGGED_IN, false)
+            val savedEmail = prefs.getString(KEY_USER_EMAIL, "") ?: ""
+            if (savedLoggedIn && savedEmail.isNotBlank()) {
+                val savedName = prefs.getString(KEY_USER_NAME, "Chai User") ?: "Chai User"
+                val savedProvider = prefs.getString(KEY_USER_PROVIDER, "Google") ?: "Google"
+                val savedUserId = prefs.getString(KEY_USER_ID, "CHAI-000000") ?: "CHAI-000000"
+                val savedMemberTier = prefs.getString(KEY_MEMBER_TIER, "Standard Member") ?: "Standard Member"
+                val savedAvatarInitial = prefs.getString(KEY_AVATAR_INITIAL, "U") ?: "U"
+                val savedJoinDate = prefs.getString(KEY_JOIN_DATE, "Sep 2024") ?: "Sep 2024"
+                val savedIsPremium = prefs.getBoolean(KEY_IS_PREMIUM, false)
+                val savedTier = prefs.getString(KEY_TIER, "none") ?: "none"
+                val savedIsBanned = prefs.getBoolean(KEY_IS_BANNED, false)
+                val savedExpiryDate = prefs.getString(KEY_EXPIRY_DATE, null)
+
+                val restoredAccount = UserAccount(
+                    name = savedName,
+                    email = savedEmail,
+                    provider = savedProvider,
+                    userId = savedUserId,
+                    memberTier = savedMemberTier,
+                    avatarInitial = savedAvatarInitial,
+                    joinDate = savedJoinDate,
+                    isPremium = savedIsPremium,
+                    tier = savedTier,
+                    isBanned = savedIsBanned,
+                    expiryDate = savedExpiryDate
+                )
+                userAccount.value = restoredAccount
+                userName.value = savedName
+                isLoggedIn.value = true
+                freeMessagesLeft.value = if (savedIsPremium) "Unlimited" else "0"
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MainViewModel", "Error restoring user session: ${e.message}")
+        }
+    }
+
+    private fun saveAccountToPrefs(account: UserAccount, loggedIn: Boolean) {
+        try {
+            val prefs = getApplication<Application>().getSharedPreferences(AUTH_PREFS, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putBoolean(KEY_IS_LOGGED_IN, loggedIn)
+                .putString(KEY_USER_NAME, account.name)
+                .putString(KEY_USER_EMAIL, account.email)
+                .putString(KEY_USER_PROVIDER, account.provider)
+                .putString(KEY_USER_ID, account.userId)
+                .putString(KEY_MEMBER_TIER, account.memberTier)
+                .putString(KEY_AVATAR_INITIAL, account.avatarInitial)
+                .putString(KEY_JOIN_DATE, account.joinDate)
+                .putBoolean(KEY_IS_PREMIUM, account.isPremium)
+                .putString(KEY_TIER, account.tier)
+                .putBoolean(KEY_IS_BANNED, account.isBanned)
+                .putString(KEY_EXPIRY_DATE, account.expiryDate)
+                .apply()
+        } catch (e: Exception) {
+            android.util.Log.w("MainViewModel", "Error saving user session: ${e.message}")
         }
     }
 
@@ -291,7 +372,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun login(name: String, email: String, provider: String) {
         val initial = name.firstOrNull()?.uppercase() ?: "U"
         val uid = "CHAI-" + (100000 + (Math.random() * 900000).toInt())
-        userAccount.value = UserAccount(
+        val newAccount = UserAccount(
             name = name,
             email = email,
             provider = provider,
@@ -304,25 +385,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             isBanned = false,
             expiryDate = null
         )
+        userAccount.value = newAccount
         userName.value = name
         isLoggedIn.value = true
+
+        // Persist session locally immediately so user stays logged in across app restarts
+        saveAccountToPrefs(newAccount, loggedIn = true)
+
         // Sync user registration to cloud KV database immediately
         viewModelScope.launch {
             PaymentSyncManager.syncUserRegistration(uid, name, email, provider)
+            // Immediately check status in case user already had active subscription
+            val status = PaymentSyncManager.fetchUserStatus(email, getApplication())
+            if (status != null) {
+                applyUserStatus(status)
+            }
         }
         // Directly show Account/Profile tab upon login
         selectedTab.value = 4
         // Automatically show "Premium কিনুন" popup dialog on new login as requested!
         isSubscriptionSheetVisible.value = true
-        // Check if user is already approved in cloud or local cache and start real-time sync
-        checkUserStatusOnce(email)
-        startApprovalCheckLoop(email)
     }
 
     fun logout() {
         approvalJob?.cancel()
         isLoggedIn.value = false
         selectedTab.value = 0
+        try {
+            val prefs = getApplication<Application>().getSharedPreferences(AUTH_PREFS, Context.MODE_PRIVATE)
+            prefs.edit().putBoolean(KEY_IS_LOGGED_IN, false).apply()
+        } catch (e: Exception) {
+            android.util.Log.w("MainViewModel", "Logout error: ${e.message}")
+        }
     }
 
     fun chargePieces(amount: Int) {
@@ -356,19 +450,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             else -> if (isPrem) "Chai Ultra Premium" else "Standard Member"
         }
 
-        userAccount.value = userAccount.value.copy(
+        val updatedAccount = userAccount.value.copy(
             isBanned = isBanned,
             tier = tier,
             isPremium = isPrem,
             memberTier = memberTitle,
             expiryDate = cloudStatus.expiryDate
         )
+        userAccount.value = updatedAccount
 
         if (isPrem) {
             freeMessagesLeft.value = "Unlimited"
         } else {
             freeMessagesLeft.value = "0"
         }
+
+        // Persist updated status locally
+        saveAccountToPrefs(updatedAccount, loggedIn = isLoggedIn.value)
     }
 
     fun buyPremium(
@@ -422,19 +520,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (email.isBlank()) return
         approvalJob?.cancel()
         approvalJob = viewModelScope.launch {
-            var interval = 15000L // start at 15s
-
-            while (isActive) {
-                if (!PaymentSyncManager.isRateLimited()) {
-                    val cloudStatus = PaymentSyncManager.fetchUserStatus(email, getApplication())
-                    if (cloudStatus != null) {
-                        applyUserStatus(cloudStatus)
+            var attempts = 0
+            val maxAttempts = 15 // Check for up to 5 minutes
+            while (isActive && attempts < maxAttempts) {
+                attempts++
+                delay(20000L) // check every 20 seconds
+                val cloudStatus = PaymentSyncManager.fetchUserStatus(email, getApplication())
+                if (cloudStatus != null) {
+                    applyUserStatus(cloudStatus)
+                    if (cloudStatus.isPremium) {
+                        // User is now premium! Stop polling loop.
+                        break
                     }
-                    interval = 20000L
-                } else {
-                    interval = 60000L // wait 1 min if cooldown
                 }
-                delay(interval)
             }
         }
     }

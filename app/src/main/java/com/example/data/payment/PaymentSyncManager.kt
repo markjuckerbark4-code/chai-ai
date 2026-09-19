@@ -81,8 +81,8 @@ object PaymentSyncManager {
             responseBody.contains("limit", ignoreCase = true) ||
             responseBody.contains("too many", ignoreCase = true)
         ) {
-            rateLimitCooldownUntil = System.currentTimeMillis() + (10 * 60 * 1000L) // 10 minutes cooldown
-            Log.w(TAG, "Cloud API limit reached (code=$code). Cloud sync paused for 10 minutes; app running in local/cached mode.")
+            rateLimitCooldownUntil = System.currentTimeMillis() + (20 * 1000L) // 20s cooldown only
+            Log.w(TAG, "Cloud API rate limit warning (code=$code). Brief 20s cooldown set.")
         }
     }
 
@@ -110,41 +110,52 @@ object PaymentSyncManager {
         name: String,
         email: String,
         provider: String
-    ) = withContext(Dispatchers.IO) {
-        if (email.isBlank()) return@withContext
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (email.isBlank()) return@withContext false
         try {
-            val response = httpGet(USERS_URL)
+            var response = httpGet(USERS_URL, force = true)
+            if (response.isBlank()) {
+                // Short retry in case of transient network hiccup
+                kotlinx.coroutines.delay(800)
+                response = httpGet(USERS_URL, force = true)
+            }
+
             val usersArray = if (response.isNotBlank()) {
-                val root = JSONObject(response)
-                val dataObj = root.optJSONObject("data") ?: root
-                dataObj.optJSONArray("users") ?: JSONArray()
+                try {
+                    val root = JSONObject(response)
+                    val dataObj = root.optJSONObject("data") ?: root
+                    dataObj.optJSONArray("users") ?: JSONArray()
+                } catch (e: Exception) {
+                    JSONArray()
+                }
             } else {
                 JSONArray()
             }
 
+            val finalUid = if (userId.isNotBlank()) userId else "CHAI-${(100000..999999).random()}"
             var found = false
+
             for (i in 0 until usersArray.length()) {
                 val u = usersArray.optJSONObject(i) ?: continue
-                val existingEmail = u.optString("email", "")
-                val existingUid = u.optString("user_id", "")
-                if (existingEmail.equals(email, ignoreCase = true) ||
-                    (userId.isNotBlank() && existingUid.equals(userId, ignoreCase = true))
+                val existingEmail = u.optString("email", "").trim()
+                val existingUid = u.optString("user_id", "").trim()
+                if (existingEmail.equals(email.trim(), ignoreCase = true) ||
+                    (finalUid.isNotBlank() && existingUid.equals(finalUid, ignoreCase = true))
                 ) {
-                    u.put("name", name)
+                    u.put("name", name.ifBlank { u.optString("name", "User") })
                     u.put("provider", provider)
-                    if (userId.isNotBlank()) u.put("user_id", userId)
+                    u.put("user_id", finalUid)
                     u.put("last_active", getIsoDate())
                     found = true
                     break
                 }
             }
 
-            if (!found) {
-                val finalUid = if (userId.isNotBlank()) userId else "CHAI-${(100000..999999).random()}"
+            val updatedArray = if (!found) {
                 val newUser = JSONObject().apply {
                     put("user_id", finalUid)
-                    put("name", name)
-                    put("email", email)
+                    put("name", name.ifBlank { "User" })
+                    put("email", email.trim())
                     put("provider", provider)
                     put("tier", "none")
                     put("is_premium", false)
@@ -153,19 +164,29 @@ object PaymentSyncManager {
                     put("created_at", getIsoDate())
                     put("last_active", getIsoDate())
                 }
-                usersArray.put(newUser)
+                // Prepend new user so they appear first in Admin Panel!
+                val arr = JSONArray()
+                arr.put(newUser)
+                for (i in 0 until usersArray.length()) {
+                    arr.put(usersArray.get(i))
+                }
+                arr
+            } else {
+                usersArray
             }
 
             val payload = JSONObject().apply {
                 put("name", "chai_ai_users")
                 put("data", JSONObject().apply {
-                    put("users", usersArray)
+                    put("users", updatedArray)
                 })
             }
-            val ok = httpPut(USERS_URL, payload.toString())
-            Log.d(TAG, "User registration cloud sync: email=$email, success=$ok")
+            val ok = httpPut(USERS_URL, payload.toString(), force = true)
+            Log.d(TAG, "User registration cloud sync: email=$email, uid=$finalUid, success=$ok")
+            ok
         } catch (e: Exception) {
-            Log.w(TAG, "User registration cloud sync warning: ${e.message}")
+            Log.w(TAG, "User registration cloud sync error: ${e.message}")
+            false
         }
     }
 
@@ -235,6 +256,38 @@ object PaymentSyncManager {
                     }
                 }
             }
+
+            // Dual verification: Check ORDERS_URL if an order was directly approved
+            val ordResponse = httpGet(ORDERS_URL)
+            if (ordResponse.isNotBlank()) {
+                try {
+                    val ordRoot = JSONObject(ordResponse)
+                    val ordData = ordRoot.optJSONObject("data") ?: ordRoot
+                    val ordArray = ordData.optJSONArray("orders") ?: JSONArray()
+                    for (i in 0 until ordArray.length()) {
+                        val o = ordArray.optJSONObject(i) ?: continue
+                        val oEmail = o.optString("user_email", "").trim()
+                        val oStatus = o.optString("status", "").lowercase()
+                        if (oEmail.equals(userEmail.trim(), ignoreCase = true) && oStatus == "approved") {
+                            val isUltra = o.optString("plan").contains("year", ignoreCase = true) ||
+                                o.optString("amount").contains("2000") ||
+                                o.optString("amount").contains("18")
+                            val tier = if (isUltra) "ultra" else "premium"
+                            return@withContext CloudUserStatus(
+                                userId = o.optString("order_id", ""),
+                                name = o.optString("user_name", ""),
+                                email = userEmail,
+                                tier = tier,
+                                isPremium = true,
+                                isBanned = false,
+                                expiryDate = null
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.d(TAG, "Orders check skipped: ${e.message}")
+                }
+            }
         } catch (e: Exception) {
             Log.w(TAG, "fetchUserStatus warning: ${e.message}")
         }
@@ -294,7 +347,11 @@ object PaymentSyncManager {
             )
 
             // 1. Fetch current orders list
-            val response = httpGet(ORDERS_URL)
+            var response = httpGet(ORDERS_URL, force = true)
+            if (response.isBlank()) {
+                kotlinx.coroutines.delay(800)
+                response = httpGet(ORDERS_URL, force = true)
+            }
             val existingOrdersArray = if (response.isNotBlank()) {
                 try {
                     val root = JSONObject(response)
@@ -341,7 +398,7 @@ object PaymentSyncManager {
                     put("orders", updatedOrdersArray)
                 })
             }
-            val success = httpPut(ORDERS_URL, payload.toString())
+            val success = httpPut(ORDERS_URL, payload.toString(), force = true)
             if (success) {
                 Log.d(TAG, "Order submitted to cloud successfully: $orderId, orders count: ${updatedOrdersArray.length()}")
             } else {
@@ -350,7 +407,11 @@ object PaymentSyncManager {
 
             // 2. CRITICAL SYNC: Also attach the pending payment order directly to user in USERS_URL
             try {
-                val usersResponse = httpGet(USERS_URL)
+                var usersResponse = httpGet(USERS_URL, force = true)
+                if (usersResponse.isBlank()) {
+                    kotlinx.coroutines.delay(800)
+                    usersResponse = httpGet(USERS_URL, force = true)
+                }
                 val usersArray = if (usersResponse.isNotBlank()) {
                     val root = JSONObject(usersResponse)
                     val dataObj = root.optJSONObject("data") ?: root
@@ -395,7 +456,7 @@ object PaymentSyncManager {
                         put("users", usersArray)
                     })
                 }
-                val userOk = httpPut(USERS_URL, usersPayload.toString())
+                val userOk = httpPut(USERS_URL, usersPayload.toString(), force = true)
                 Log.d(TAG, "Attached pending order to user profile in USERS_URL: success=$userOk")
             } catch (e: Exception) {
                 Log.w(TAG, "User profile order attachment skipped: ${e.message}")
@@ -520,8 +581,8 @@ object PaymentSyncManager {
         null
     }
 
-    private fun httpGet(urlString: String): String {
-        if (isRateLimited()) {
+    private fun httpGet(urlString: String, force: Boolean = false): String {
+        if (!force && isRateLimited()) {
             Log.d(TAG, "Skipping httpGet to $urlString (rate limit cooldown active)")
             return ""
         }
@@ -530,8 +591,8 @@ object PaymentSyncManager {
             val url = URL(urlString)
             conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 5000
-                readTimeout = 5000
+                connectTimeout = 7000
+                readTimeout = 7000
                 setRequestProperty("Accept", "application/json")
                 setRequestProperty("User-Agent", "ChaiAi-Android/1.0")
             }
@@ -543,7 +604,7 @@ object PaymentSyncManager {
             } else {
                 val err = conn.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } ?: ""
                 handleRateLimitOrError(responseCode, err)
-                Log.w(TAG, "httpGet response code=$responseCode for $urlString")
+                Log.w(TAG, "httpGet response code=$responseCode for $urlString: $err")
                 ""
             }
         } catch (e: Exception) {
@@ -554,8 +615,8 @@ object PaymentSyncManager {
         }
     }
 
-    private fun httpPut(urlString: String, payload: String): Boolean {
-        if (isRateLimited()) {
+    private fun httpPut(urlString: String, payload: String, force: Boolean = false): Boolean {
+        if (!force && isRateLimited()) {
             Log.d(TAG, "Skipping httpPut to $urlString (rate limit cooldown active)")
             return false
         }
@@ -565,8 +626,8 @@ object PaymentSyncManager {
             conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "PUT"
                 doOutput = true
-                connectTimeout = 5000
-                readTimeout = 5000
+                connectTimeout = 7000
+                readTimeout = 7000
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 setRequestProperty("Accept", "application/json")
                 setRequestProperty("User-Agent", "ChaiAi-Android/1.0")

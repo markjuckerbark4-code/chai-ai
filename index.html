@@ -1036,7 +1036,11 @@
     window.addEventListener('DOMContentLoaded', () => {
       loadInitialData();
       fetchCloudData();
-      setInterval(fetchCloudData, 30000); // 30s background sync to avoid rate limit
+      setInterval(() => {
+        if (!document.hidden) {
+          fetchCloudData();
+        }
+      }, 30000); // 30s background sync when tab is active
     });
 
     function loadInitialData() {
@@ -1063,7 +1067,21 @@
             ? usrJson.data.users
             : (Array.isArray(usrJson.users) ? usrJson.users : []);
           if (remoteUsers.length > 0) {
-            allUsers = remoteUsers;
+            const merged = [...remoteUsers];
+            allUsers.forEach(localU => {
+              const rIdx = merged.findIndex(r => 
+                (r.email && localU.email && r.email.trim().toLowerCase() === localU.email.trim().toLowerCase()) ||
+                (r.user_id && localU.user_id && r.user_id === localU.user_id)
+              );
+              if (rIdx === -1) {
+                merged.unshift(localU);
+              } else {
+                if (localU.pending_order && !merged[rIdx].pending_order) {
+                  merged[rIdx].pending_order = localU.pending_order;
+                }
+              }
+            });
+            allUsers = merged;
             localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
           }
         }
@@ -1076,7 +1094,17 @@
             ? ordJson.data.orders
             : (Array.isArray(ordJson.orders) ? ordJson.orders : []);
           if (remoteOrders.length > 0) {
-            allOrders = remoteOrders;
+            const mergedOrders = [...remoteOrders];
+            allOrders.forEach(localO => {
+              const exists = mergedOrders.some(r => 
+                (r.order_id && localO.order_id && r.order_id === localO.order_id) ||
+                (r.trx_id && localO.trx_id && r.trx_id.trim().toUpperCase() === localO.trx_id.trim().toUpperCase())
+              );
+              if (!exists) {
+                mergedOrders.unshift(localO);
+              }
+            });
+            allOrders = mergedOrders;
             localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(allOrders));
           }
         }
@@ -1084,7 +1112,10 @@
         // 3. Dual-Channel: Merge pending orders attached to user accounts
         allUsers.forEach(u => {
           if (u.pending_order && u.pending_order.trx_id) {
-            const exists = allOrders.some(o => (o.order_id && o.order_id === u.pending_order.order_id) || (o.trx_id && o.trx_id.toLowerCase() === u.pending_order.trx_id.toLowerCase()));
+            const exists = allOrders.some(o => 
+              (o.order_id && o.order_id === u.pending_order.order_id) || 
+              (o.trx_id && o.trx_id.trim().toUpperCase() === u.pending_order.trx_id.trim().toUpperCase())
+            );
             if (!exists) {
               allOrders.unshift({
                 order_id: u.pending_order.order_id || ('ord-' + Date.now().toString().slice(-6)),
@@ -1356,12 +1387,13 @@
       const expiryDate = new Date(Date.now() + 1000 * 60 * 60 * 24 * days).toISOString();
 
       // Update user in allUsers
-      let targetUser = allUsers.find(u => u.email.toLowerCase() === (order.user_email || '').toLowerCase());
+      let targetUser = allUsers.find(u => (u.email || '').trim().toLowerCase() === (order.user_email || '').trim().toLowerCase());
       if (targetUser) {
         targetUser.tier = tierCode;
         targetUser.is_premium = true;
         targetUser.expiry_date = expiryDate;
         targetUser.is_banned = false;
+        targetUser.last_active = new Date().toISOString();
         if (targetUser.pending_order) {
           targetUser.pending_order.status = 'approved';
         }
@@ -1375,7 +1407,8 @@
           is_premium: true,
           is_banned: false,
           expiry_date: expiryDate,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          last_active: new Date().toISOString()
         };
         allUsers.unshift(targetUser);
       }
@@ -1396,9 +1429,10 @@
       if (!order) return;
 
       order.status = 'rejected';
-      const targetUser = allUsers.find(u => u.email.toLowerCase() === (order.user_email || '').toLowerCase());
+      const targetUser = allUsers.find(u => (u.email || '').trim().toLowerCase() === (order.user_email || '').trim().toLowerCase());
       if (targetUser && targetUser.pending_order) {
         targetUser.pending_order.status = 'rejected';
+        targetUser.last_active = new Date().toISOString();
       }
 
       localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(allOrders));
@@ -1412,10 +1446,10 @@
     }
 
     async function approveUserPaymentDirectly(email) {
-      const user = allUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+      const user = allUsers.find(u => (u.email || '').trim().toLowerCase() === (email || '').trim().toLowerCase());
       if (!user) return;
 
-      const order = allOrders.find(o => (o.user_email || '').toLowerCase() === email.toLowerCase() && o.status === 'pending')
+      const order = allOrders.find(o => (o.user_email || '').trim().toLowerCase() === (email || '').trim().toLowerCase() && o.status === 'pending')
         || (user.pending_order ? user.pending_order : null);
 
       const isUltra = order
@@ -1429,6 +1463,7 @@
       user.is_premium = true;
       user.expiry_date = expiryDate;
       user.is_banned = false;
+      user.last_active = new Date().toISOString();
       if (user.pending_order) {
         user.pending_order.status = 'approved';
       }
@@ -1596,7 +1631,7 @@
     }
 
     async function changeUserTierDirectly(email, newTier) {
-      const user = allUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+      const user = allUsers.find(u => (u.email || '').trim().toLowerCase() === (email || '').trim().toLowerCase());
       if (!user) return;
 
       user.tier = newTier;
@@ -1612,27 +1647,29 @@
         // 10 months unlimited use (~300 days)
         user.expiry_date = new Date(Date.now() + 1000 * 60 * 60 * 24 * 300).toISOString();
       }
+      user.last_active = new Date().toISOString();
 
       // 1. Immediately update UI
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
       renderAllViews();
 
       const tierBangla = newTier === 'ultra' ? 'Ultra (১০ মাস আনলিমিটেড)' : (newTier === 'premium' ? 'Premium (৭ দিন আনলিমিটেড)' : 'Non-premium (ফ্রি)');
-      showToast(`${user.name} এর জন্য ${tierBangla} সক্রিয় করা হয়েছে!`);
+      showToast(`${user.name || user.email} এর জন্য ${tierBangla} সক্রিয় করা হয়েছে!`);
 
       // 2. Sync to Cloud
       await saveUsersToCloud();
     }
 
     async function toggleUserBanDirectly(email) {
-      const user = allUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+      const user = allUsers.find(u => (u.email || '').trim().toLowerCase() === (email || '').trim().toLowerCase());
       if (!user) return;
 
       user.is_banned = !user.is_banned;
+      user.last_active = new Date().toISOString();
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
       renderAllViews();
 
-      showToast(`${user.name} ${user.is_banned ? 'স্থগিত (Banned)' : 'সক্রিয় (Unbanned)'} করা হয়েছে!`);
+      showToast(`${user.name || user.email} ${user.is_banned ? 'স্থগিত (Banned)' : 'সক্রিয় (Unbanned)'} করা হয়েছে!`);
 
       // Sync to Cloud
       await saveUsersToCloud();
@@ -1640,7 +1677,7 @@
 
     async function deleteUserDirectly(email) {
       if (!confirm(`Are you sure you want to remove user ${email}?`)) return;
-      allUsers = allUsers.filter(u => u.email.toLowerCase() !== email.toLowerCase());
+      allUsers = allUsers.filter(u => (u.email || '').trim().toLowerCase() !== (email || '').trim().toLowerCase());
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
       renderAllViews();
       showToast('ইউজার ডাটাবেজ থেকে রিমুভ করা হয়েছে।');
@@ -1778,12 +1815,39 @@
 
     async function saveUserDetailsChanges() {
       if (!inspectedUser) return;
-      const user = allUsers.find(u => u.email.toLowerCase() === inspectedUser.email.toLowerCase());
-      if (user) {
-        user.is_banned = inspectedUser.is_banned;
+      let user = allUsers.find(u => 
+        (u.email && inspectedUser.email && u.email.trim().toLowerCase() === inspectedUser.email.trim().toLowerCase()) ||
+        (u.user_id && inspectedUser.user_id && u.user_id === inspectedUser.user_id)
+      );
+      if (!user) {
+        user = inspectedUser;
+        allUsers.unshift(user);
       }
-      await changeUserTierDirectly(inspectedUser.email, modalSelectedTier);
+      user.is_banned = inspectedUser.is_banned;
+      user.tier = modalSelectedTier;
+      if (modalSelectedTier === 'none') {
+        user.is_premium = false;
+        user.expiry_date = null;
+      } else if (modalSelectedTier === 'premium') {
+        user.is_premium = true;
+        user.expiry_date = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
+      } else if (modalSelectedTier === 'ultra') {
+        user.is_premium = true;
+        user.expiry_date = new Date(Date.now() + 1000 * 60 * 60 * 24 * 300).toISOString();
+      }
+      user.last_active = new Date().toISOString();
+
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
+      renderAllViews();
       closeUserDetailsModal();
+
+      const tierBangla = modalSelectedTier === 'ultra' ? 'Ultra (১০ মাস আনলিমিটেড)' : (modalSelectedTier === 'premium' ? 'Premium (৭ দিন আনলিমিটেড)' : 'Non-premium (ফ্রি)');
+      showToast(`${user.name || user.email} এর জন্য ${tierBangla} ও স্ট্যাটাস সেভ হয়েছে! ক্লাউডে সিঙ্ক হচ্ছে...`);
+
+      const synced = await saveUsersToCloud();
+      if (synced) {
+        showToast(`${user.name || user.email} এর তথ্য সফলভাবে ক্লাউডে সিঙ্ক হয়েছে!`);
+      }
     }
 
     async function deleteUserFromModal() {
