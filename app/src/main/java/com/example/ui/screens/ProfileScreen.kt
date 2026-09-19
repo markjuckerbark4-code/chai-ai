@@ -111,21 +111,21 @@ fun ProfileScreen(
             .testTag("profile_screen"),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Title
+        // Screen Title
         Text(
-            text = "ACCOUNT & PROFILE",
-            color = ChaiTextPrimary,
+            text = "PROFILE",
+            color = Color.White,
             fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Bold,
             letterSpacing = 1.2.sp,
-            modifier = Modifier.padding(bottom = 20.dp)
+            modifier = Modifier.padding(bottom = 16.dp)
         )
 
         // Large Avatar with user initial and camera badge
         Box(
             modifier = Modifier
-                .size(130.dp)
-                .padding(bottom = 8.dp),
+                .size(125.dp)
+                .padding(bottom = 6.dp),
             contentAlignment = Alignment.Center
         ) {
             Box(
@@ -136,9 +136,9 @@ fun ProfileScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = userAccount.avatarInitial.ifBlank { "M" },
+                    text = userAccount.avatarInitial.ifBlank { userAccount.name.take(1).uppercase() }.ifBlank { "M" },
                     color = Color.White,
-                    fontSize = 54.sp,
+                    fontSize = 52.sp,
                     fontWeight = FontWeight.Medium
                 )
             }
@@ -165,174 +165,417 @@ fun ProfileScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Account Name (editable)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = userAccount.name,
-                color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            IconButton(
-                onClick = {
-                    editingName = userAccount.name
-                    showEditNameDialog = true
-                },
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = "Edit Name",
-                    tint = ChaiTextSecondary,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = userAccount.email,
-            color = ChaiTextSecondary,
-            fontSize = 13.sp
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Unique User ID Pill with Copy Action
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF191926))
-                .border(1.dp, Color(0xFF2C2C3E), RoundedCornerShape(20.dp))
-                .clickable {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("Chai User ID", userAccount.userId))
-                    Toast.makeText(context, "User ID কপি হয়েছে: ${userAccount.userId}", Toast.LENGTH_SHORT).show()
-                }
-                .padding(horizontal = 14.dp, vertical = 6.dp)
-                .testTag("profile_user_id_pill")
-        ) {
-            Text(
-                text = "ID: ",
-                color = ChaiTextSecondary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = userAccount.userId,
-                color = Color(0xFFFFD54F),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Icon(
-                imageVector = Icons.Default.ContentCopy,
-                contentDescription = "Copy User ID",
-                tint = Color(0xFFAAAAAA),
-                modifier = Modifier.size(13.dp)
-            )
-        }
-
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Free messages left Card (User Request: "tar nice free massage left eta zero thakbi jodi kew taka deai ar ami admin panal e aprove di taile ekhane unlimited show korbi")
-        Box(
+        // ==============================================================
+        // MAIN ACCOUNT OPTIONS LIST (Matching the Chai screenshot layout)
+        // ==============================================================
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(
-                    if (userAccount.isPremium) {
-                        Brush.horizontalGradient(listOf(Color(0xFF281E0C), Color(0xFF1B1408)))
-                    } else {
-                        Brush.horizontalGradient(listOf(Color(0xFF201318), Color(0xFF14141E)))
-                    }
-                )
-                .border(
-                    width = 1.5.dp,
-                    color = if (userAccount.isPremium) Color(0xFFFFB300) else Color(0x55E50914),
-                    shape = RoundedCornerShape(16.dp)
-                )
-                .padding(16.dp)
-                .testTag("free_messages_card")
+                .background(Color(0xFF15151C))
+                .border(1.dp, Color(0xFF262632), RoundedCornerShape(16.dp))
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
+            // 1. Name Row
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        editingName = userAccount.name
+                        showEditNameDialog = true
+                    }
+                    .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(if (userAccount.isPremium) Color(0xFFFFB300) else Color(0xFF33161C)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (userAccount.isPremium) Icons.Default.WorkspacePremium else Icons.Outlined.Chat,
-                        contentDescription = null,
-                        tint = if (userAccount.isPremium) Color.Black else Color(0xFFFF4D4D),
-                        modifier = Modifier.size(24.dp)
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = "Name",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Name",
+                        color = ChaiTextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Normal
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = userAccount.name,
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
+                IconButton(
+                    onClick = {
+                        editingName = userAccount.name
+                        showEditNameDialog = true
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit Name",
+                        tint = Color(0xFFAAAAAA),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
 
-                Spacer(modifier = Modifier.width(14.dp))
+            HorizontalDivider(color = Color(0xFF232330))
 
+            // 2. Personas Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showPersonasDialog = true }
+                    .padding(vertical = 14.dp)
+                    .testTag("personas_menu_item"),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Style,
+                    contentDescription = "Personas",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = "Personas",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                    contentDescription = "Open Personas",
+                    tint = Color(0xFFAAAAAA),
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+
+            HorizontalDivider(color = Color(0xFF232330))
+
+            // 3. Free messages left Row (0 for free users, Unlimited for approved/premium users)
+            val isUserPremium = userAccount.isPremium || freeMessages.equals("Unlimited", ignoreCase = true)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp)
+                    .testTag("free_messages_row"),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Chat,
+                    contentDescription = "Messages",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Free messages left",
                         color = ChaiTextSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (userAccount.isPremium) "Unlimited 👑" else "0",
-                        color = if (userAccount.isPremium) Color(0xFFFFD54F) else Color(0xFFFF5252),
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (userAccount.isPremium) {
-                            "${userAccount.memberTier} Active • অনুমোদিত"
-                        } else {
-                            "সীমা শেষ • আনলিমিটেড করতে রিচার্জ করুন"
-                        },
-                        color = if (userAccount.isPremium) Color(0xFF81C784) else Color(0xFFB0B0C0),
                         fontSize = 11.sp,
-                        fontWeight = if (userAccount.isPremium) FontWeight.SemiBold else FontWeight.Normal
+                        fontWeight = FontWeight.Normal
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (isUserPremium) "Unlimited" else "0",
+                        color = if (isUserPremium) Color(0xFFFFD54F) else Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
+                Button(
+                    onClick = onOpenUpgrade,
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isUserPremium) Color(0xFFFFB300) else ChaiRed
+                    ),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .height(36.dp)
+                        .testTag("upgrade_button")
+                ) {
+                    Text(
+                        text = if (isUserPremium) "Ultra" else "Upgrade",
+                        color = if (isUserPremium) Color.Black else Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
 
-                if (!userAccount.isPremium) {
-                    Button(
-                        onClick = onOpenUpgrade,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ChaiRed),
-                        modifier = Modifier.testTag("recharge_premium_button")
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 4. Restore Purchases Button
+            Button(
+                onClick = {
+                    if (userAccount.isPremium) {
+                        Toast.makeText(context, "✅ Premium সক্রিয় আছে: ${userAccount.memberTier}", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(context, "ক্লাউড থেকে সাবস্ক্রিপশন চেক করা হচ্ছে...", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                shape = RoundedCornerShape(22.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22222D)),
+                border = BorderStroke(1.dp, Color(0xFF333342)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .testTag("restore_purchases_button")
+            ) {
+                Text(
+                    text = "Restore Purchases",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = Color(0xFF232330))
+
+            // 5. My Pieces Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(ChaiRed),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Token,
+                        contentDescription = "Pieces",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "My Pieces",
+                        color = ChaiTextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Normal
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = piecesCount.toString(),
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Button(
+                    onClick = { showChargeDialog = true },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ChaiRed),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .height(36.dp)
+                        .testTag("charge_pieces_button")
+                ) {
+                    Text(
+                        text = "Charge",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            HorizontalDivider(color = Color(0xFF232330))
+
+            // 6. Contact Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        try {
+                            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                data = Uri.parse("mailto:hello@chai-research.com")
+                                putExtra(Intent.EXTRA_SUBJECT, "Chai AI Query")
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Chai Email", "hello@chai-research.com"))
+                            Toast.makeText(context, "ইমেইল কপি হয়েছে: hello@chai-research.com", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Email,
+                    contentDescription = "Contact",
+                    tint = Color.White,
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Contact",
+                        color = ChaiTextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Normal
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "hello@chai-research.com",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Got a question or complaint? Send us an email...",
+                        color = ChaiTextSecondary,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Account Details & ID Card
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF15151C))
+                .border(1.dp, Color(0xFF262632), RoundedCornerShape(16.dp))
+                .padding(14.dp)
+                .testTag("account_details_card")
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.VerifiedUser,
+                        contentDescription = null,
+                        tint = if (userAccount.isPremium) Color(0xFFFFB300) else Color(0xFF4CAF50),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "ACCOUNT IDENTIFIER",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    // Active Status Badge
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (userAccount.isPremium) Color(0x33FFB300) else Color(0x224CAF50))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(if (userAccount.isPremium) Color(0xFFFFB300) else Color(0xFF4CAF50))
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "Premium কিনুন",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            text = if (userAccount.isPremium) "Ultra VIP" else "Active",
+                            color = if (userAccount.isPremium) Color(0xFFFFD54F) else Color(0xFF4CAF50),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = Color(0xFF232330))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // User ID Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Chai User ID", userAccount.userId))
+                            Toast.makeText(context, "User ID কপি হয়েছে: ${userAccount.userId}", Toast.LENGTH_SHORT).show()
+                        },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("User ID", color = ChaiTextSecondary, fontSize = 12.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = userAccount.userId,
+                            color = Color(0xFFFFD54F),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy User ID",
+                            tint = Color(0xFFAAAAAA),
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Email Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Email", color = ChaiTextSecondary, fontSize = 12.sp)
+                    Text(userAccount.email, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Member Tier Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Membership", color = ChaiTextSecondary, fontSize = 12.sp)
+                    Text(
+                        text = if (userAccount.isPremium) "Chai Ultra (Unlimited)" else "Standard Free (0 Messages)",
+                        color = if (userAccount.isPremium) Color(0xFFFFD54F) else Color(0xFFFF8A80),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Server Cooldown Notice Card (User Request: "ar notic thakbi 1 ghonta ba 2 ghonta calanor por 30 minit cool down")
+        // Server Cooldown Notice Card
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -345,16 +588,16 @@ fun ProfileScreen(
             Row(verticalAlignment = Alignment.Top) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(32.dp)
                         .clip(CircleShape)
                         .background(Color(0xFF382318)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Info,
-                        contentDescription = "Server Policy Notice",
+                        contentDescription = "Server Notice",
                         tint = Color(0xFFFFB74D),
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
@@ -362,7 +605,7 @@ fun ProfileScreen(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "সার্ভার নোটিশ ও কুল ডাউন (Cool Down)",
+                        text = "সার্ভার নোটিশ ও কুল ডাউন",
                         color = Color(0xFFFFB74D),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -380,84 +623,13 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Contact Email Card (User Request: "tar por nice contact email chai@recharge.com")
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFF14141E))
-                .border(1.dp, Color(0xFF262638), RoundedCornerShape(16.dp))
-                .clickable {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("Chai Support Email", "chai@recharge.com"))
-                    Toast.makeText(context, "ইমেইল কপি করা হয়েছে: chai@recharge.com", Toast.LENGTH_SHORT).show()
-                }
-                .padding(16.dp)
-                .testTag("contact_email_card")
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF1F2233)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Email,
-                        contentDescription = "Email Support",
-                        tint = Color(0xFF64B5F6),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(14.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Contact & Recharge Support",
-                        color = ChaiTextSecondary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "chai@recharge.com",
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF1A1A28)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ContentCopy,
-                        contentDescription = "Copy Email",
-                        tint = Color(0xFFAAAAAA),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Social Media Logos (User Request: "ar nice facbook instagram tiktok er logo")
+        // Social Media Logos
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFF14141E))
-                .border(1.dp, Color(0xFF262638), RoundedCornerShape(16.dp))
+                .background(Color(0xFF15151C))
+                .border(1.dp, Color(0xFF262632), RoundedCornerShape(16.dp))
                 .padding(horizontal = 16.dp, vertical = 14.dp)
                 .testTag("social_media_section"),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -477,7 +649,7 @@ fun ProfileScreen(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Facebook Logo & Button
+                // Facebook
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
@@ -485,33 +657,21 @@ fun ProfileScreen(
                             Toast.makeText(context, "Chai AI Facebook কমিউনিটি খুলছে...", Toast.LENGTH_SHORT).show()
                         }
                         .padding(8.dp)
-                        .testTag("facebook_logo_button")
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(50.dp)
+                            .size(46.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF1877F2))
-                            .border(1.5.dp, Color(0xFF4285F4), CircleShape),
+                            .background(Color(0xFF1877F2)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "f",
-                            color = Color.White,
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Black
-                        )
+                        Text("f", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Facebook",
-                        color = Color(0xFFB0C4DE),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Facebook", color = Color(0xFFB0C4DE), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
 
-                // Instagram Logo & Button
+                // Instagram
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
@@ -519,41 +679,30 @@ fun ProfileScreen(
                             Toast.makeText(context, "Chai AI Instagram পেজ খুলছে...", Toast.LENGTH_SHORT).show()
                         }
                         .padding(8.dp)
-                        .testTag("instagram_logo_button")
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(50.dp)
+                            .size(46.dp)
                             .clip(CircleShape)
                             .background(
                                 Brush.linearGradient(
-                                    listOf(
-                                        Color(0xFF833AB4),
-                                        Color(0xFFFD1D1D),
-                                        Color(0xFFF77737)
-                                    )
+                                    listOf(Color(0xFF833AB4), Color(0xFFFD1D1D), Color(0xFFF77737))
                                 )
-                            )
-                            .border(1.5.dp, Color(0xFFFF8A80), CircleShape),
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.PhotoCamera,
                             contentDescription = "Instagram",
                             tint = Color.White,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Instagram",
-                        color = Color(0xFFFFB2B2),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Instagram", color = Color(0xFFFFB2B2), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
 
-                // TikTok Logo & Button
+                // TikTok
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
@@ -561,228 +710,36 @@ fun ProfileScreen(
                             Toast.makeText(context, "Chai AI TikTok চ্যানেল খুলছে...", Toast.LENGTH_SHORT).show()
                         }
                         .padding(8.dp)
-                        .testTag("tiktok_logo_button")
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(50.dp)
+                            .size(46.dp)
                             .clip(CircleShape)
                             .background(Color(0xFF010101))
-                            .border(1.5.dp, Color(0xFF00F2FE), CircleShape),
+                            .border(1.dp, Color(0xFF00F2FE), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.MusicNote,
-                                contentDescription = "TikTok",
-                                tint = Color(0xFF00F2FE),
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "TikTok",
-                        color = Color(0xFF80DEEA),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(18.dp))
-
-        // Account Details Card
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(ChaiCardBackground)
-                .border(1.dp, ChaiBorder, RoundedCornerShape(16.dp))
-                .padding(16.dp)
-                .testTag("account_details_card")
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.VerifiedUser,
-                        contentDescription = null,
-                        tint = Color(0xFF4CAF50),
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "ACCOUNT DETAILS",
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    // Active Status Badge
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0x224CAF50))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF4CAF50))
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            text = "Active",
-                            color = Color(0xFF4CAF50),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
+                        Icon(
+                            imageVector = Icons.Default.MusicNote,
+                            contentDescription = "TikTok",
+                            tint = Color(0xFF00F2FE),
+                            modifier = Modifier.size(22.dp)
                         )
                     }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-                HorizontalDivider(color = ChaiBorder.copy(alpha = 0.5f))
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Account ID Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("User ID", color = ChaiTextSecondary, fontSize = 13.sp)
-                    Text(userAccount.userId, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Email Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Email", color = ChaiTextSecondary, fontSize = 13.sp)
-                    Text(userAccount.email, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Membership Tier
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Member Tier", color = ChaiTextSecondary, fontSize = 13.sp)
-                    Text(
-                        text = if (userAccount.isPremium) "Chai Ultra Premium" else userAccount.memberTier,
-                        color = if (userAccount.isPremium) Color(0xFFFFD54F) else Color(0xFFFFB74D),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Member Since
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Member Since", color = ChaiTextSecondary, fontSize = 13.sp)
-                    Text(userAccount.joinDate, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("TikTok", color = Color(0xFF80DEEA), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Upgrade / Premium Banner Card
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    if (userAccount.isPremium) {
-                        Brush.horizontalGradient(listOf(Color(0xFF2E2412), Color(0xFF1E180E)))
-                    } else {
-                        Brush.horizontalGradient(listOf(Color(0xFF3B1218), Color(0xFF1E1418)))
-                    }
-                )
-                .border(
-                    1.dp,
-                    if (userAccount.isPremium) Color(0xFFFFB300) else ChaiRed.copy(alpha = 0.5f),
-                    RoundedCornerShape(16.dp)
-                )
-                .clickable { onOpenUpgrade() }
-                .padding(16.dp)
-                .testTag("upgrade_banner_card")
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(if (userAccount.isPremium) Color(0xFFFFB300) else ChaiRed),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.WorkspacePremium,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (userAccount.isPremium) "Chai Ultra Premium 👑" else "Upgrade to Premium ✨",
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = if (userAccount.isPremium) "Unlimited messages & Fast memory enabled" else "Weekly ৳230 | Yearly ৳2000 (bKash/Nagad)",
-                        color = if (userAccount.isPremium) Color(0xFFFFD54F) else ChaiTextSecondary,
-                        fontSize = 12.sp
-                    )
-                }
-                Button(
-                    onClick = onOpenUpgrade,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (userAccount.isPremium) Color(0xFFFFB300) else ChaiRed
-                    )
-                ) {
-                    Text(
-                        text = if (userAccount.isPremium) "Ultra" else "Upgrade",
-                        color = if (userAccount.isPremium) Color.Black else Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Sign Out / Switch Account Button
         Button(
             onClick = { showLogoutConfirmDialog = true },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .height(46.dp)
                 .testTag("logout_account_button"),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
@@ -807,216 +764,6 @@ fun ProfileScreen(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFFFF5252)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider(color = ChaiBorder.copy(alpha = 0.6f))
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Name Item
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(26.dp)
-            )
-            Spacer(modifier = Modifier.width(18.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Display Name", color = ChaiTextSecondary, fontSize = 12.sp)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(userAccount.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            }
-            IconButton(
-                onClick = { showEditNameDialog = true },
-                modifier = Modifier.testTag("edit_name_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = "Edit Name",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-
-        HorizontalDivider(color = ChaiBorder.copy(alpha = 0.6f))
-
-        // Personas Item
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { showPersonasDialog = true }
-                .padding(vertical = 16.dp)
-                .testTag("personas_menu_item"),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Style,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(26.dp)
-            )
-            Spacer(modifier = Modifier.width(18.dp))
-            Text(
-                text = "Personas",
-                color = Color.White,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f)
-            )
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-
-        HorizontalDivider(color = ChaiBorder.copy(alpha = 0.6f))
-
-        // Free messages left
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Chat,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(18.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Free messages left", color = ChaiTextSecondary, fontSize = 12.sp)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = if (userAccount.isPremium) "Unlimited" else freeMessages,
-                    color = if (userAccount.isPremium) Color(0xFFFFD54F) else Color.White,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Button(
-                onClick = onOpenUpgrade,
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (userAccount.isPremium) Color(0xFF2C2210) else ChaiRed
-                ),
-                border = if (userAccount.isPremium) BorderStroke(1.dp, Color(0xFFFFB300)) else null,
-                modifier = Modifier
-                    .height(38.dp)
-                    .testTag("upgrade_button")
-            ) {
-                Text(
-                    text = if (userAccount.isPremium) "Unlimited" else "Upgrade",
-                    color = if (userAccount.isPremium) Color(0xFFFFB300) else Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Restore Purchases button
-        Button(
-            onClick = {
-                Toast.makeText(context, "Purchases restored successfully", Toast.LENGTH_SHORT).show()
-            },
-            shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222228)),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .testTag("restore_purchases_button")
-        ) {
-            Text(
-                text = "Restore Purchases",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-        HorizontalDivider(color = ChaiBorder.copy(alpha = 0.6f))
-
-        // My Pieces
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(ChaiRed),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Token,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(18.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("My Pieces", color = ChaiTextSecondary, fontSize = 12.sp)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(piecesCount.toString(), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            }
-            Button(
-                onClick = { showChargeDialog = true },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ChaiRed),
-                modifier = Modifier
-                    .height(38.dp)
-                    .testTag("charge_pieces_button")
-            ) {
-                Text("Charge", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            }
-        }
-
-        HorizontalDivider(color = ChaiBorder.copy(alpha = 0.6f))
-
-        // Contact
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 14.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Icon(
-                imageVector = Icons.Default.Email,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier
-                    .padding(top = 2.dp)
-                    .size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(18.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Contact", color = ChaiTextSecondary, fontSize = 12.sp)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text("hello@chai-research.com", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Got a question or complaint? Send us an email...",
-                    color = ChaiTextSecondary,
-                    fontSize = 12.sp
                 )
             }
         }

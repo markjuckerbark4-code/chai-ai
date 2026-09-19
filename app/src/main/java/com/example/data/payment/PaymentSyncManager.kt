@@ -11,6 +11,7 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -69,6 +70,26 @@ object PaymentSyncManager {
 
     private const val PREFS_NAME = "chai_payment_prefs"
     private const val KEY_LAST_STATUS = "key_last_payment_status"
+
+    @Volatile
+    private var rateLimitCooldownUntil: Long = 0L
+
+    fun isRateLimited(): Boolean = System.currentTimeMillis() < rateLimitCooldownUntil
+
+    private fun handleRateLimitOrError(code: Int, responseBody: String) {
+        if (code == 405 || code == 429 ||
+            responseBody.contains("limit", ignoreCase = true) ||
+            responseBody.contains("too many", ignoreCase = true)
+        ) {
+            rateLimitCooldownUntil = System.currentTimeMillis() + (10 * 60 * 1000L) // 10 minutes cooldown
+            Log.w(TAG, "Cloud API limit reached (code=$code). Cloud sync paused for 10 minutes; app running in local/cached mode.")
+        }
+    }
+
+    fun hasPendingOrder(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_LAST_STATUS, "") == "pending"
+    }
 
     fun cleanEmailKey(email: String): String {
         return email.lowercase().replace("@", "_at_").replace(".", "_dot_").replace("+", "_plus_")
@@ -144,7 +165,7 @@ object PaymentSyncManager {
             val ok = httpPut(USERS_URL, payload.toString())
             Log.d(TAG, "User registration cloud sync: email=$email, success=$ok")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to sync user to cloud", e)
+            Log.w(TAG, "User registration cloud sync warning: ${e.message}")
         }
     }
 
@@ -152,9 +173,11 @@ object PaymentSyncManager {
      * Checks if this user's account has been banned, approved, or assigned a tier (none/premium/ultra).
      */
     suspend fun fetchUserStatus(
-        userEmail: String
+        userEmail: String,
+        context: Context? = null
     ): CloudUserStatus? = withContext(Dispatchers.IO) {
         if (userEmail.isBlank()) return@withContext null
+        val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
         try {
             val response = httpGet(USERS_URL)
@@ -192,6 +215,14 @@ object PaymentSyncManager {
                             }
                         }
 
+                        // Cache in SharedPreferences
+                        prefs?.edit()
+                            ?.putString("user_tier", tier)
+                            ?.putBoolean("is_premium", isPremium)
+                            ?.putBoolean("is_banned", isBanned)
+                            ?.putString("expiry_date", expiryDate)
+                            ?.apply()
+
                         return@withContext CloudUserStatus(
                             userId = userId,
                             name = name,
@@ -205,8 +236,29 @@ object PaymentSyncManager {
                 }
             }
         } catch (e: Exception) {
-            Log.d(TAG, "fetchUserStatus error: ${e.message}")
+            Log.w(TAG, "fetchUserStatus warning: ${e.message}")
         }
+
+        // Fallback to local cached status if remote is unavailable or rate-limited
+        if (prefs != null) {
+            val isPrem = prefs.getBoolean("is_premium", false)
+            val lastStatus = prefs.getString(KEY_LAST_STATUS, "")
+            val isBanned = prefs.getBoolean("is_banned", false)
+            val expiry = prefs.getString("expiry_date", null)
+            val tier = prefs.getString("user_tier", if (isPrem || lastStatus == "approved") "ultra" else "none") ?: "none"
+            if (isPrem || lastStatus == "approved" || isBanned) {
+                return@withContext CloudUserStatus(
+                    userId = prefs.getString("last_order_id", "") ?: "",
+                    name = "",
+                    email = userEmail,
+                    tier = tier,
+                    isPremium = isPrem || lastStatus == "approved",
+                    isBanned = isBanned,
+                    expiryDate = expiry
+                )
+            }
+        }
+
         null
     }
 
@@ -244,16 +296,19 @@ object PaymentSyncManager {
             // 1. Fetch current orders list
             val response = httpGet(ORDERS_URL)
             val existingOrdersArray = if (response.isNotBlank()) {
-                val root = JSONObject(response)
-                val dataObj = root.optJSONObject("data") ?: root
-                dataObj.optJSONArray("orders") ?: JSONArray()
+                try {
+                    val root = JSONObject(response)
+                    val dataObj = root.optJSONObject("data") ?: root
+                    dataObj.optJSONArray("orders") ?: JSONArray()
+                } catch (e: Exception) {
+                    JSONArray()
+                }
             } else {
                 JSONArray()
             }
 
             // Prepend new order
-            val updatedOrdersArray = JSONArray()
-            updatedOrdersArray.put(JSONObject().apply {
+            val orderJson = JSONObject().apply {
                 put("order_id", newOrder.orderId)
                 put("user_name", newOrder.userName)
                 put("user_email", newOrder.userEmail)
@@ -265,10 +320,18 @@ object PaymentSyncManager {
                 put("screenshot_note", newOrder.screenshotNote)
                 put("status", newOrder.status)
                 put("created_at", newOrder.createdAt)
-            })
+            }
+
+            val updatedOrdersArray = JSONArray()
+            updatedOrdersArray.put(orderJson)
 
             for (i in 0 until existingOrdersArray.length()) {
                 val item = existingOrdersArray.optJSONObject(i) ?: continue
+                val existingTrx = item.optString("trx_id")
+                val existingId = item.optString("order_id")
+                if (existingTrx.equals(newOrder.trxId, ignoreCase = true) || existingId == newOrder.orderId) {
+                    continue
+                }
                 updatedOrdersArray.put(item)
             }
 
@@ -278,20 +341,93 @@ object PaymentSyncManager {
                     put("orders", updatedOrdersArray)
                 })
             }
-            httpPut(ORDERS_URL, payload.toString())
+            val success = httpPut(ORDERS_URL, payload.toString())
+            if (success) {
+                Log.d(TAG, "Order submitted to cloud successfully: $orderId, orders count: ${updatedOrdersArray.length()}")
+            } else {
+                Log.w(TAG, "Failed to upload order to cloud ORDERS_URL, will attach to user profile: $orderId")
+            }
 
-            // Save locally in SharedPreferences
+            // 2. CRITICAL SYNC: Also attach the pending payment order directly to user in USERS_URL
+            try {
+                val usersResponse = httpGet(USERS_URL)
+                val usersArray = if (usersResponse.isNotBlank()) {
+                    val root = JSONObject(usersResponse)
+                    val dataObj = root.optJSONObject("data") ?: root
+                    dataObj.optJSONArray("users") ?: JSONArray()
+                } else {
+                    JSONArray()
+                }
+
+                var matched = false
+                for (i in 0 until usersArray.length()) {
+                    val u = usersArray.optJSONObject(i) ?: continue
+                    if (u.optString("email").equals(userEmail, ignoreCase = true)) {
+                        u.put("pending_order", orderJson)
+                        u.put("last_trx_id", newOrder.trxId)
+                        u.put("last_active", getIsoDate())
+                        usersArray.put(i, u)
+                        matched = true
+                        break
+                    }
+                }
+
+                if (!matched && userEmail.isNotBlank()) {
+                    val newUserObj = JSONObject().apply {
+                        put("user_id", "CHAI-" + (100000 + (Math.random() * 900000).toInt()))
+                        put("name", userName.ifBlank { "User" })
+                        put("email", userEmail)
+                        put("provider", "Google")
+                        put("tier", "none")
+                        put("is_premium", false)
+                        put("is_banned", false)
+                        put("pending_order", orderJson)
+                        put("last_trx_id", newOrder.trxId)
+                        put("created_at", getIsoDate())
+                        put("last_active", getIsoDate())
+                    }
+                    usersArray.put(0, newUserObj)
+                }
+
+                val usersPayload = JSONObject().apply {
+                    put("name", "chai_ai_users")
+                    put("data", JSONObject().apply {
+                        put("users", usersArray)
+                    })
+                }
+                val userOk = httpPut(USERS_URL, usersPayload.toString())
+                Log.d(TAG, "Attached pending order to user profile in USERS_URL: success=$userOk")
+            } catch (e: Exception) {
+                Log.w(TAG, "User profile order attachment skipped: ${e.message}")
+            }
+
+            // Save locally in SharedPreferences immediately
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putString(KEY_LAST_STATUS, "pending")
                 .putString("last_order_id", orderId)
+                .putString("last_trx_id", newOrder.trxId)
+                .putString("last_plan", newOrder.plan)
+                .putString("last_amount", newOrder.amount)
                 .apply()
 
-            Log.d(TAG, "Order submitted successfully: $orderId")
             Result.success(newOrder)
         } catch (e: Exception) {
-            Log.e(TAG, "Error submitting order to cloud", e)
-            Result.failure(e)
+            Log.w(TAG, "Order submission remote sync skipped: ${e.message}")
+            Result.success(
+                PaymentOrder(
+                    orderId = "ord-" + System.currentTimeMillis().toString().takeLast(6),
+                    userName = userName,
+                    userEmail = userEmail,
+                    paymentMethod = paymentMethod,
+                    senderNumber = senderNumber,
+                    trxId = trxId.trim().uppercase(),
+                    plan = plan,
+                    amount = amount,
+                    status = "pending",
+                    createdAt = getIsoDate()
+                )
+            )
         }
     }
 
@@ -305,7 +441,7 @@ object PaymentSyncManager {
         if (userEmail.isBlank()) return@withContext false
 
         try {
-            val status = fetchUserStatus(userEmail)
+            val status = fetchUserStatus(userEmail, context)
             if (status != null && status.isPremium) {
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .edit()
@@ -315,7 +451,7 @@ object PaymentSyncManager {
                 return@withContext true
             }
         } catch (e: Exception) {
-            Log.d(TAG, "checkUserApprovalStatus error: ${e.message}")
+            Log.w(TAG, "checkUserApprovalStatus notice: ${e.message}")
         }
         false
     }
@@ -353,7 +489,7 @@ object PaymentSyncManager {
                 return@withContext settings
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching payment settings: ${e.message}")
+            Log.w(TAG, "Notice: could not fetch remote payment settings (${e.message}), using default settings.")
         }
 
         PaymentSettings(
@@ -376,15 +512,19 @@ object PaymentSyncManager {
             if (response.isNotBlank()) {
                 val root = JSONObject(response)
                 val dataObj = root.optJSONObject("data") ?: root
-                return@withContext dataObj.optString("notice", null)
+                return@withContext if (dataObj.has("notice")) dataObj.optString("notice") else null
             }
         } catch (e: Exception) {
-            Log.d(TAG, "fetchServerNotice error: ${e.message}")
+            Log.w(TAG, "fetchServerNotice notice: ${e.message}")
         }
         null
     }
 
     private fun httpGet(urlString: String): String {
+        if (isRateLimited()) {
+            Log.d(TAG, "Skipping httpGet to $urlString (rate limit cooldown active)")
+            return ""
+        }
         var conn: HttpURLConnection? = null
         return try {
             val url = URL(urlString)
@@ -393,18 +533,21 @@ object PaymentSyncManager {
                 connectTimeout = 5000
                 readTimeout = 5000
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "ChaiAi-Android")
+                setRequestProperty("User-Agent", "ChaiAi-Android/1.0")
             }
             val responseCode = conn.responseCode
             if (responseCode in 200..299) {
-                BufferedReader(InputStreamReader(conn.inputStream)).use { reader ->
+                conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { reader ->
                     reader.readText()
                 }
             } else {
+                val err = conn.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } ?: ""
+                handleRateLimitOrError(responseCode, err)
+                Log.w(TAG, "httpGet response code=$responseCode for $urlString")
                 ""
             }
         } catch (e: Exception) {
-            Log.e(TAG, "httpGet error: $urlString, ${e.message}")
+            Log.w(TAG, "httpGet network error: $urlString, ${e.message}")
             ""
         } finally {
             conn?.disconnect()
@@ -412,6 +555,10 @@ object PaymentSyncManager {
     }
 
     private fun httpPut(urlString: String, payload: String): Boolean {
+        if (isRateLimited()) {
+            Log.d(TAG, "Skipping httpPut to $urlString (rate limit cooldown active)")
+            return false
+        }
         var conn: HttpURLConnection? = null
         return try {
             val url = URL(urlString)
@@ -420,18 +567,27 @@ object PaymentSyncManager {
                 doOutput = true
                 connectTimeout = 5000
                 readTimeout = 5000
-                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "ChaiAi-Android")
+                setRequestProperty("User-Agent", "ChaiAi-Android/1.0")
             }
-            OutputStreamWriter(conn.outputStream).use { writer ->
-                writer.write(payload)
-                writer.flush()
+            val bytes = payload.toByteArray(StandardCharsets.UTF_8)
+            conn.setFixedLengthStreamingMode(bytes.size)
+            conn.outputStream.use { os ->
+                os.write(bytes)
+                os.flush()
             }
             val code = conn.responseCode
-            code in 200..299
+            if (code in 200..299) {
+                true
+            } else {
+                val err = conn.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } ?: ""
+                handleRateLimitOrError(code, err)
+                Log.w(TAG, "httpPut response code=$code for $urlString: $err")
+                false
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "httpPut error: $urlString, ${e.message}")
+            Log.w(TAG, "httpPut network exception: $urlString, ${e.message}")
             false
         } finally {
             conn?.disconnect()

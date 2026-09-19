@@ -38,12 +38,15 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -92,6 +95,7 @@ fun ChatScreen(
     activePersona: PersonaEntity?,
     isGenerating: Boolean,
     streamingReply: StreamingReply? = null,
+    isPremium: Boolean = false,
     onBack: () -> Unit,
     onSendMessage: (String) -> Unit,
     onReroll: () -> Unit,
@@ -408,7 +412,13 @@ fun ChatScreen(
         ) {
             items(suggestions) { suggestion ->
                 SuggestionChip(
-                    onClick = { onSendMessage(suggestion) },
+                    onClick = {
+                        if (isPremium) {
+                            onSendMessage(suggestion)
+                        } else {
+                            onOpenUpgrade()
+                        }
+                    },
                     label = {
                         Text(
                             text = suggestion,
@@ -429,99 +439,157 @@ fun ChatScreen(
             }
         }
 
-        // --- Bottom Input Row (matching screenshot) ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color(0xFF13131A))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // User Avatar circle on the left
-            Box(
+        // --- Bottom Input Area: Locked for Free Users, Active for Premium Users ---
+        if (!isPremium) {
+            Row(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF262632))
-                    .border(1.dp, Color(0xFF383848), CircleShape),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .background(Color(0xFF14141E))
+                    .border(1.dp, Color(0x44E50914), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                    .clickable { onOpenUpgrade() }
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .testTag("chat_locked_premium_bar"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = "User Profile",
-                    tint = Color(0xFFC0C0D0),
-                    modifier = Modifier.size(22.dp)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF2B161B))
+                            .border(1.5.dp, Color(0xFFE50914), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = "Locked",
+                            tint = Color(0xFFE50914),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "মেসেজিং লক করা (Premium Only)",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "বটের সাথে চ্যাট করতে প্রিমিয়াম আনলক করুন",
+                            color = ChaiTextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(
+                    onClick = onOpenUpgrade,
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ChaiRed),
+                    modifier = Modifier.testTag("chat_unlock_premium_button")
+                ) {
+                    Text("Unlock", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            // Pill text field "Type a message"
-            OutlinedTextField(
-                value = inputText,
-                onValueChange = { inputText = it },
-                placeholder = {
-                    Text("Type a message", color = Color(0xFF7A7A8A), fontSize = 14.sp)
-                },
+        } else {
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .testTag("chat_input_field"),
-                shape = RoundedCornerShape(24.dp),
-                maxLines = 4,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF1C1C24),
-                    unfocusedContainerColor = Color(0xFF1C1C24),
-                    focusedBorderColor = Color(0xFF3A3A4C),
-                    unfocusedBorderColor = Color(0xFF282834),
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    cursorColor = ChaiRed
-                )
-            )
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            // Action button on right: refresh when empty, send when text typed
-            if (inputText.isBlank()) {
-                // Circular refresh/reroll button (as seen in screenshot)
+                    .fillMaxWidth()
+                    .background(Color(0xFF13131A))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // User Avatar circle on the left
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF252532))
-                        .clickable { onReroll() }
-                        .testTag("chat_reroll_button"),
+                        .background(Color(0xFF262632))
+                        .border(1.dp, Color(0xFF383848), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Reroll",
-                        tint = Color(0xFFD4D4E0),
-                        modifier = Modifier.size(20.dp)
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "User Profile",
+                        tint = Color(0xFFC0C0D0),
+                        modifier = Modifier.size(22.dp)
                     )
                 }
-            } else {
-                // Send button
-                Box(
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // Pill text field "Type a message"
+                OutlinedTextField(
+                    value = inputText,
+                    onValueChange = { inputText = it },
+                    placeholder = {
+                        Text("Type a message", color = Color(0xFF7A7A8A), fontSize = 14.sp)
+                    },
                     modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(ChaiRed)
-                        .clickable {
-                            if (!isGenerating && streamingReply == null) {
-                                onSendMessage(inputText.trim())
-                                inputText = ""
-                            }
-                        }
-                        .testTag("chat_send_button"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp)
+                        .weight(1f)
+                        .testTag("chat_input_field"),
+                    shape = RoundedCornerShape(24.dp),
+                    maxLines = 4,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xFF1C1C24),
+                        unfocusedContainerColor = Color(0xFF1C1C24),
+                        focusedBorderColor = Color(0xFF3A3A4C),
+                        unfocusedBorderColor = Color(0xFF282834),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = ChaiRed
                     )
+                )
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // Action button on right: refresh when empty, send when text typed
+                if (inputText.isBlank()) {
+                    // Circular refresh/reroll button (as seen in screenshot)
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF252532))
+                            .clickable { onReroll() }
+                            .testTag("chat_reroll_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Reroll",
+                            tint = Color(0xFFD4D4E0),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                } else {
+                    // Send button
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(ChaiRed)
+                            .clickable {
+                                if (!isGenerating && streamingReply == null) {
+                                    onSendMessage(inputText.trim())
+                                    inputText = ""
+                                }
+                            }
+                            .testTag("chat_send_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }

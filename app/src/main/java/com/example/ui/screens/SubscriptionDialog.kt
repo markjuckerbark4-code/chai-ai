@@ -889,7 +889,7 @@ fun SubscriptionDialog(
                         }
 
                         val finalPlan = if (isCrypto) {
-                            if (isWeekly) "Weekly ($paymentSettings.cryptoWeeklyPrice)" else "Yearly ($paymentSettings.cryptoYearlyPrice)"
+                            if (isWeekly) "Weekly (${paymentSettings.cryptoWeeklyPrice})" else "Yearly (${paymentSettings.cryptoYearlyPrice})"
                         } else {
                             if (isWeekly) "Weekly (৳${paymentSettings.bdtWeeklyPrice})" else "Yearly (৳${paymentSettings.bdtYearlyPrice})"
                         }

@@ -1036,7 +1036,7 @@
     window.addEventListener('DOMContentLoaded', () => {
       loadInitialData();
       fetchCloudData();
-      setInterval(fetchCloudData, 3500); // 3.5s Real-time background sync
+      setInterval(fetchCloudData, 30000); // 30s background sync to avoid rate limit
     });
 
     function loadInitialData() {
@@ -1059,7 +1059,9 @@
         const usrRes = await fetch(USERS_URL, { cache: 'no-store' });
         if (usrRes.ok) {
           const usrJson = await usrRes.json();
-          const remoteUsers = (usrJson.data && Array.isArray(usrJson.data.users)) ? usrJson.data.users : [];
+          const remoteUsers = (usrJson.data && Array.isArray(usrJson.data.users))
+            ? usrJson.data.users
+            : (Array.isArray(usrJson.users) ? usrJson.users : []);
           if (remoteUsers.length > 0) {
             allUsers = remoteUsers;
             localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
@@ -1070,12 +1072,36 @@
         const ordRes = await fetch(ORDERS_URL, { cache: 'no-store' });
         if (ordRes.ok) {
           const ordJson = await ordRes.json();
-          const remoteOrders = (ordJson.data && Array.isArray(ordJson.data.orders)) ? ordJson.data.orders : [];
+          const remoteOrders = (ordJson.data && Array.isArray(ordJson.data.orders))
+            ? ordJson.data.orders
+            : (Array.isArray(ordJson.orders) ? ordJson.orders : []);
           if (remoteOrders.length > 0) {
             allOrders = remoteOrders;
             localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(allOrders));
           }
         }
+
+        // 3. Dual-Channel: Merge pending orders attached to user accounts
+        allUsers.forEach(u => {
+          if (u.pending_order && u.pending_order.trx_id) {
+            const exists = allOrders.some(o => (o.order_id && o.order_id === u.pending_order.order_id) || (o.trx_id && o.trx_id.toLowerCase() === u.pending_order.trx_id.toLowerCase()));
+            if (!exists) {
+              allOrders.unshift({
+                order_id: u.pending_order.order_id || ('ord-' + Date.now().toString().slice(-6)),
+                user_name: u.name || 'User',
+                user_email: u.email,
+                payment_method: u.pending_order.payment_method || 'bKash',
+                sender_number: u.pending_order.sender_number || '',
+                trx_id: u.pending_order.trx_id,
+                plan: u.pending_order.plan || 'Weekly (৳২৩০)',
+                amount: u.pending_order.amount || '৳২৩০',
+                screenshot_note: u.pending_order.screenshot_note || '',
+                status: u.pending_order.status || 'pending',
+                created_at: u.pending_order.created_at || new Date().toISOString()
+              });
+            }
+          }
+        });
 
         // 3. Fetch Settings / Notice & Payment Numbers
         const setRes = await fetch(SETTINGS_URL, { cache: 'no-store' });
@@ -1321,23 +1347,28 @@
       order.status = 'approved';
       order.approved_at = new Date().toISOString();
 
-      // Determine Tier: if amount >= 1000 or contains 'Yearly', ultra (10 months); else weekly premium (7 days)
-      const isUltra = (parseFloat(order.amount) >= 1000) || (order.plan && order.plan.toLowerCase().includes('year'));
+      // Determine Tier: if amount >= 1000 or contains 'Yearly' or '2000' or '18', ultra (10 months); else weekly premium (7 days)
+      const isUltra = (parseFloat(order.amount) >= 1000) ||
+        (order.plan && (order.plan.toLowerCase().includes('year') || order.plan.toLowerCase().includes('yearly'))) ||
+        (String(order.amount).includes('2000') || String(order.amount).includes('18'));
       const tierCode = isUltra ? 'ultra' : 'premium';
       const days = isUltra ? 300 : 7; // 10 months or 7 days
       const expiryDate = new Date(Date.now() + 1000 * 60 * 60 * 24 * days).toISOString();
 
       // Update user in allUsers
-      let targetUser = allUsers.find(u => u.email.toLowerCase() === order.user_email.toLowerCase());
+      let targetUser = allUsers.find(u => u.email.toLowerCase() === (order.user_email || '').toLowerCase());
       if (targetUser) {
         targetUser.tier = tierCode;
         targetUser.is_premium = true;
         targetUser.expiry_date = expiryDate;
         targetUser.is_banned = false;
+        if (targetUser.pending_order) {
+          targetUser.pending_order.status = 'approved';
+        }
       } else {
         targetUser = {
           user_id: 'CHAI-' + Math.floor(100000 + Math.random() * 900000),
-          name: order.user_name,
+          name: order.user_name || 'User',
           email: order.user_email,
           provider: 'bKash/Nagad',
           tier: tierCode,
@@ -1353,7 +1384,7 @@
       localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(allOrders));
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
       renderAllViews();
-      showToast(`অর্ডার অনুমোদিত হয়েছে! ${order.user_name} কে ${isUltra ? 'Ultra (১০ মাস)' : 'Premium (৭ দিন)'} প্রদান করা হয়েছে।`);
+      showToast(`অর্ডার অনুমোদিত হয়েছে! ${order.user_name || 'User'} কে ${isUltra ? 'Ultra (১০ মাস)' : 'Premium (৭ দিন)'} প্রদান করা হয়েছে।`);
 
       // Sync to cloud
       await saveOrdersToCloud();
@@ -1365,11 +1396,54 @@
       if (!order) return;
 
       order.status = 'rejected';
+      const targetUser = allUsers.find(u => u.email.toLowerCase() === (order.user_email || '').toLowerCase());
+      if (targetUser && targetUser.pending_order) {
+        targetUser.pending_order.status = 'rejected';
+      }
+
       localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(allOrders));
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
       renderAllViews();
       showToast('অর্ডার বাতিল (Rejected) করা হয়েছে।', 'error');
 
       // Sync to cloud
+      await saveOrdersToCloud();
+      await saveUsersToCloud();
+    }
+
+    async function approveUserPaymentDirectly(email) {
+      const user = allUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+      if (!user) return;
+
+      const order = allOrders.find(o => (o.user_email || '').toLowerCase() === email.toLowerCase() && o.status === 'pending')
+        || (user.pending_order ? user.pending_order : null);
+
+      const isUltra = order
+        ? ((parseFloat(order.amount) >= 1000) || (order.plan && (order.plan.toLowerCase().includes('year') || order.plan.toLowerCase().includes('yearly'))) || String(order.amount).includes('2000') || String(order.amount).includes('18'))
+        : false;
+      const tierCode = isUltra ? 'ultra' : 'premium';
+      const days = isUltra ? 300 : 7;
+      const expiryDate = new Date(Date.now() + 1000 * 60 * 60 * 24 * days).toISOString();
+
+      user.tier = tierCode;
+      user.is_premium = true;
+      user.expiry_date = expiryDate;
+      user.is_banned = false;
+      if (user.pending_order) {
+        user.pending_order.status = 'approved';
+      }
+
+      if (order) {
+        order.status = 'approved';
+        order.approved_at = new Date().toISOString();
+      }
+
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(allUsers));
+      localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(allOrders));
+      renderAllViews();
+      showToast(`${user.name} এর পেমেন্ট অনুমোদিত হয়েছে! ${isUltra ? 'Ultra (১০ মাস)' : 'Premium (৭ দিন)'} সক্রিয় করা হয়েছে।`);
+
+      await saveUsersToCloud();
       await saveOrdersToCloud();
     }
 
@@ -1435,6 +1509,11 @@
           ? '<span class="inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold border border-red-500/30"><i data-lucide="slash" class="w-3 h-3"></i> Banned</span>'
           : '<span class="inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30"><i data-lucide="check" class="w-3 h-3"></i> Active</span>';
 
+        const hasPendingOrder = (usr.pending_order && usr.pending_order.status === 'pending') ||
+          allOrders.some(o => (o.user_email || '').toLowerCase() === usr.email.toLowerCase() && o.status === 'pending');
+        const pendingTrx = (usr.pending_order && usr.pending_order.trx_id) ||
+          (allOrders.find(o => (o.user_email || '').toLowerCase() === usr.email.toLowerCase() && o.status === 'pending')?.trx_id) || '';
+
         tr.innerHTML = `
           <td class="py-4 px-5">
             <div class="flex items-center gap-2">
@@ -1454,6 +1533,13 @@
               <div>
                 <div class="font-bold text-white">${usr.name || 'User'}</div>
                 <div class="text-gray-400 text-[11px]">${usr.email}</div>
+                ${hasPendingOrder ? `
+                  <div class="mt-1 flex items-center gap-1.5">
+                    <span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40 animate-pulse">
+                      <i data-lucide="clock" class="w-2.5 h-2.5"></i> পেন্ডিং পেমেন্ট: ${pendingTrx}
+                    </span>
+                  </div>
+                ` : ''}
               </div>
             </div>
           </td>
@@ -1472,6 +1558,15 @@
           <td class="py-4 px-4 text-xs">${expiryDisplay}</td>
           <td class="py-4 px-5 text-right">
             <div class="flex items-center justify-end space-x-1.5">
+              ${hasPendingOrder ? `
+                <button
+                  onclick="approveUserPaymentDirectly('${usr.email}')"
+                  class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold shadow-md transition flex items-center gap-1"
+                  title="Approve Pending Payment"
+                >
+                  <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Approve
+                </button>
+              ` : ''}
               <button
                 onclick="searchAndInspectUser('${usr.user_id}')"
                 class="p-2 rounded-lg bg-[#181826] hover:bg-[#222238] text-gray-300 hover:text-white transition"
@@ -1623,6 +1718,7 @@
         userOrders.forEach(o => {
           const div = document.createElement('div');
           div.className = 'flex items-center justify-between p-2 rounded-lg bg-[#0C0C14] border border-[#202030] text-[11px]';
+          const isPending = o.status === 'pending';
           div.innerHTML = `
             <div>
               <span class="font-bold text-white">${o.plan}</span> &bull; <span class="text-amber-400 font-mono">${o.trx_id}</span>
@@ -1630,6 +1726,14 @@
             <div class="flex items-center gap-2">
               <span class="font-bold text-white">৳ ${o.amount}</span>
               <span class="text-[10px] uppercase font-bold ${o.status === 'approved' ? 'text-emerald-400' : (o.status === 'rejected' ? 'text-red-400' : 'text-amber-400')}">${o.status}</span>
+              ${isPending ? `
+                <button
+                  onclick="approveOrder('${o.order_id}'); document.getElementById('user-details-modal').classList.add('hidden');"
+                  class="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px]"
+                >
+                  Approve
+                </button>
+              ` : ''}
             </div>
           `;
           userOrdersDiv.appendChild(div);

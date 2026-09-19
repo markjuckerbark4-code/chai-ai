@@ -89,6 +89,7 @@ fun ChaiApp(viewModel: MainViewModel = viewModel()) {
                 activePersona = activePersona,
                 isGenerating = isGeneratingReply,
                 streamingReply = streamingReply,
+                isPremium = userAccount.isPremium,
                 onBack = { viewModel.closeChat() },
                 onSendMessage = { text -> viewModel.sendMessage(text) },
                 onReroll = { viewModel.rerollBotResponse() },

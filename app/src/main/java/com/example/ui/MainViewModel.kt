@@ -7,10 +7,12 @@ import com.example.data.database.ChaiDatabase
 import com.example.data.model.BotEntity
 import com.example.data.model.MessageEntity
 import com.example.data.model.PersonaEntity
+import com.example.data.payment.CloudUserStatus
 import com.example.data.payment.PaymentSyncManager
 import com.example.data.repository.ChaiRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -73,12 +75,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isLoggedIn = MutableStateFlow(false)
     val userAccount = MutableStateFlow(
         UserAccount(
-            name = "Mark Juckerbark",
-            email = "markjuckerbark4@gmail.com",
+            name = "Chai User",
+            email = "",
             provider = "Google",
-            userId = "CHAI-939348",
+            userId = "CHAI-000000",
             memberTier = "Standard Member",
-            avatarInitial = "M",
+            avatarInitial = "U",
             joinDate = "Sep 2024",
             isPremium = false,
             tier = "none",
@@ -113,7 +115,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 email = current.email,
                 provider = current.provider
             )
-            // Immediately start listening for admin changes from cloud
+            // Start continuous real-time status sync with Admin Panel
             startApprovalCheckLoop(current.email)
         }
     }
@@ -127,6 +129,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun sendMessage(text: String) {
+        if (!userAccount.value.isPremium) {
+            isSubscriptionSheetVisible.value = true
+            return
+        }
         val currentBotId = _activeBotId.value ?: return
         if (text.isBlank() || isGeneratingReply.value || _streamingBotReply.value != null) return
 
@@ -162,6 +168,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun rerollBotResponse() {
+        if (!userAccount.value.isPremium) {
+            isSubscriptionSheetVisible.value = true
+            return
+        }
         val currentBotId = _activeBotId.value ?: return
         val bot = allBots.value.find { it.id == currentBotId } ?: return
         if (isGeneratingReply.value || _streamingBotReply.value != null) return
@@ -304,7 +314,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selectedTab.value = 4
         // Automatically show "Premium কিনুন" popup dialog on new login as requested!
         isSubscriptionSheetVisible.value = true
-        // Check if user is already approved in cloud or start continuous sync
+        // Check if user is already approved in cloud or local cache and start real-time sync
+        checkUserStatusOnce(email)
         startApprovalCheckLoop(email)
     }
 
@@ -321,6 +332,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshPaymentSettings() {
         viewModelScope.launch {
             paymentSettings.value = PaymentSyncManager.fetchPaymentSettings(getApplication())
+        }
+    }
+
+    fun checkUserStatusOnce(email: String) {
+        if (email.isBlank()) return
+        viewModelScope.launch {
+            val cloudStatus = PaymentSyncManager.fetchUserStatus(email, getApplication())
+            if (cloudStatus != null) {
+                applyUserStatus(cloudStatus)
+            }
+        }
+    }
+
+    private fun applyUserStatus(cloudStatus: CloudUserStatus) {
+        val isBanned = cloudStatus.isBanned
+        val tier = cloudStatus.tier.lowercase()
+        val isPrem = cloudStatus.isPremium || tier == "premium" || tier == "ultra"
+
+        val memberTitle = when (tier) {
+            "ultra" -> "Chai Ultra (10 Months)"
+            "premium" -> "Chai Premium (7 Days)"
+            else -> if (isPrem) "Chai Ultra Premium" else "Standard Member"
+        }
+
+        userAccount.value = userAccount.value.copy(
+            isBanned = isBanned,
+            tier = tier,
+            isPremium = isPrem,
+            memberTier = memberTitle,
+            expiryDate = cloudStatus.expiryDate
+        )
+
+        if (isPrem) {
+            freeMessagesLeft.value = "Unlimited"
+        } else {
+            freeMessagesLeft.value = "0"
         }
     }
 
@@ -375,34 +422,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (email.isBlank()) return
         approvalJob?.cancel()
         approvalJob = viewModelScope.launch {
-            while (true) {
-                val cloudStatus = PaymentSyncManager.fetchUserStatus(email)
-                if (cloudStatus != null) {
-                    val isBanned = cloudStatus.isBanned
-                    val tier = cloudStatus.tier.lowercase()
-                    val isPrem = cloudStatus.isPremium || tier == "premium" || tier == "ultra"
+            var interval = 15000L // start at 15s
 
-                    val memberTitle = when (tier) {
-                        "ultra" -> "Chai Ultra (10 Months)"
-                        "premium" -> "Chai Premium (7 Days)"
-                        else -> if (isPrem) "Chai Ultra Premium" else "Standard Member"
+            while (isActive) {
+                if (!PaymentSyncManager.isRateLimited()) {
+                    val cloudStatus = PaymentSyncManager.fetchUserStatus(email, getApplication())
+                    if (cloudStatus != null) {
+                        applyUserStatus(cloudStatus)
                     }
-
-                    userAccount.value = userAccount.value.copy(
-                        isBanned = isBanned,
-                        tier = tier,
-                        isPremium = isPrem,
-                        memberTier = memberTitle,
-                        expiryDate = cloudStatus.expiryDate
-                    )
-
-                    if (isPrem) {
-                        freeMessagesLeft.value = "Unlimited"
-                    } else {
-                        freeMessagesLeft.value = "0"
-                    }
+                    interval = 20000L
+                } else {
+                    interval = 60000L // wait 1 min if cooldown
                 }
-                delay(3000)
+                delay(interval)
             }
         }
     }
@@ -417,12 +449,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 }
 
 data class UserAccount(
-    val name: String = "Mark Juckerbark",
-    val email: String = "markjuckerbark4@gmail.com",
+    val name: String = "Chai User",
+    val email: String = "",
     val provider: String = "Google",
-    val userId: String = "CHAI-939348",
+    val userId: String = "CHAI-000000",
     val memberTier: String = "Standard Member",
-    val avatarInitial: String = "M",
+    val avatarInitial: String = "U",
     val joinDate: String = "Sep 2024",
     val isPremium: Boolean = false,
     val tier: String = "none", // "none", "premium", "ultra"

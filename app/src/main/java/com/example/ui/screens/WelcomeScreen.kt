@@ -1,5 +1,11 @@
 package com.example.ui.screens
 
+import android.accounts.AccountManager
+import android.app.Activity
+import android.content.Context
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -54,12 +61,83 @@ import com.example.ui.theme.ChaiRed
 import com.example.ui.theme.ChaiTextPrimary
 import com.example.ui.theme.ChaiTextSecondary
 
+data class DeviceAccount(
+    val name: String,
+    val email: String
+)
+
+private val avatarColors = listOf(
+    Color(0xFFE91E63),
+    Color(0xFF673AB7),
+    Color(0xFF2196F3),
+    Color(0xFF009688),
+    Color(0xFFFF9800),
+    Color(0xFF3F51B5),
+    Color(0xFF00BCD4)
+)
+
+private fun getAvatarColor(email: String): Color {
+    val hash = kotlin.math.abs(email.hashCode())
+    return avatarColors[hash % avatarColors.size]
+}
+
+private fun getDeviceGoogleAccounts(context: Context): List<DeviceAccount> {
+    val accountsList = mutableListOf<DeviceAccount>()
+    try {
+        val am = AccountManager.get(context)
+        val googleAccounts = am.getAccountsByType("com.google")
+        for (acc in googleAccounts) {
+            val email = acc.name
+            if (!email.isNullOrBlank() && !accountsList.any { it.email.equals(email, ignoreCase = true) }) {
+                val derivedName = email.substringBefore("@")
+                    .replace(".", " ")
+                    .replace("_", " ")
+                    .replace("-", " ")
+                    .split(" ")
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
+                    .ifBlank { "Google User" }
+                accountsList.add(DeviceAccount(derivedName, email))
+            }
+        }
+    } catch (e: Exception) {
+        Log.w("WelcomeScreen", "Could not query device accounts: ${e.message}")
+    }
+    return accountsList
+}
+
 @Composable
 fun WelcomeScreen(
     onSignIn: (name: String, email: String, provider: String) -> Unit
 ) {
+    val context = LocalContext.current
+    var deviceAccounts by remember { mutableStateOf<List<DeviceAccount>>(emptyList()) }
     var showGoogleAccountPicker by remember { mutableStateOf(false) }
     var showCustomAccountDialog by remember { mutableStateOf(false) }
+    var showFacebookDialog by remember { mutableStateOf(false) }
+
+    val systemAccountPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val selectedEmail = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
+            if (!selectedEmail.isNullOrBlank()) {
+                val derivedName = selectedEmail.substringBefore("@")
+                    .replace(".", " ")
+                    .replace("_", " ")
+                    .replace("-", " ")
+                    .split(" ")
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
+                    .ifBlank { "Google User" }
+                onSignIn(derivedName, selectedEmail, "Google")
+                return@rememberLauncherForActivityResult
+            }
+        }
+        val detectedAccounts = getDeviceGoogleAccounts(context)
+        deviceAccounts = detectedAccounts
+        showGoogleAccountPicker = true
+    }
 
     Box(
         modifier = Modifier
@@ -137,7 +215,28 @@ fun WelcomeScreen(
 
             // Buttons: Sign in with Google
             Button(
-                onClick = { showGoogleAccountPicker = true },
+                onClick = {
+                    val detectedAccounts = getDeviceGoogleAccounts(context)
+                    deviceAccounts = detectedAccounts
+                    if (detectedAccounts.isNotEmpty()) {
+                        showGoogleAccountPicker = true
+                    } else {
+                        try {
+                            val chooseIntent = AccountManager.newChooseAccountIntent(
+                                null,
+                                null,
+                                arrayOf("com.google"),
+                                null,
+                                null,
+                                null,
+                                null
+                            )
+                            systemAccountPickerLauncher.launch(chooseIntent)
+                        } catch (e: Exception) {
+                            showGoogleAccountPicker = true
+                        }
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
@@ -181,7 +280,7 @@ fun WelcomeScreen(
             // Buttons: Sign in with Facebook
             Button(
                 onClick = {
-                    onSignIn("Mark Juckerbark", "mark.juckerbark@facebook.com", "Facebook")
+                    showFacebookDialog = true
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -292,33 +391,91 @@ fun WelcomeScreen(
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
 
-                    // Account 1: Mark Juckerbark
-                    AccountSelectItem(
-                        name = "Mark Juckerbark",
-                        email = "markjuckerbark4@gmail.com",
-                        avatarColor = Color(0xFFE91E63),
-                        initial = "M",
-                        onClick = {
-                            showGoogleAccountPicker = false
-                            onSignIn("Mark Juckerbark", "markjuckerbark4@gmail.com", "Google")
+                    if (deviceAccounts.isNotEmpty()) {
+                        deviceAccounts.forEachIndexed { index, account ->
+                            AccountSelectItem(
+                                name = account.name,
+                                email = account.email,
+                                avatarColor = getAvatarColor(account.email),
+                                initial = account.name.firstOrNull()?.uppercase() ?: "G",
+                                onClick = {
+                                    showGoogleAccountPicker = false
+                                    onSignIn(account.name, account.email, "Google")
+                                }
+                            )
+                            if (index < deviceAccounts.size - 1) {
+                                HorizontalDivider(
+                                    color = ChaiBorder.copy(alpha = 0.5f),
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                )
+                            }
                         }
-                    )
 
-                    HorizontalDivider(color = ChaiBorder.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 4.dp))
+                        HorizontalDivider(
+                            color = ChaiBorder.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    } else {
+                        Text(
+                            text = "No Google accounts detected directly on this device.",
+                            color = ChaiTextSecondary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                    }
 
-                    // Account 2: Arafat Md
-                    AccountSelectItem(
-                        name = "Arafat Md",
-                        email = "arafat.chai@gmail.com",
-                        avatarColor = Color(0xFF673AB7),
-                        initial = "A",
-                        onClick = {
-                            showGoogleAccountPicker = false
-                            onSignIn("Arafat Md", "arafat.chai@gmail.com", "Google")
+                    // System Google Account Chooser option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                showGoogleAccountPicker = false
+                                try {
+                                    val chooseIntent = AccountManager.newChooseAccountIntent(
+                                        null,
+                                        null,
+                                        arrayOf("com.google"),
+                                        null,
+                                        null,
+                                        null,
+                                        null
+                                    )
+                                    systemAccountPickerLauncher.launch(chooseIntent)
+                                } catch (e: Exception) {
+                                    showCustomAccountDialog = true
+                                }
+                            }
+                            .padding(vertical = 10.dp, horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF2C2C34)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
-                    )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Choose from Android system",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
 
-                    HorizontalDivider(color = ChaiBorder.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 4.dp))
+                    HorizontalDivider(
+                        color = ChaiBorder.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
 
                     // Use another account
                     Row(
@@ -410,7 +567,15 @@ fun WelcomeScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        val finalName = customName.trim().ifBlank { "User" }
+                        val finalName = customName.trim().ifBlank {
+                            customEmail.substringBefore("@")
+                                .replace(".", " ")
+                                .replace("_", " ")
+                                .split(" ")
+                                .filter { it.isNotBlank() }
+                                .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+                                .ifBlank { "User" }
+                        }
                         val finalEmail = customEmail.trim().ifBlank { "user@gmail.com" }
                         showCustomAccountDialog = false
                         onSignIn(finalName, finalEmail, "Google")
@@ -422,6 +587,69 @@ fun WelcomeScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showCustomAccountDialog = false }) {
+                    Text("Cancel", color = ChaiTextSecondary)
+                }
+            }
+        )
+    }
+
+    // Facebook Sign-In Dialog
+    if (showFacebookDialog) {
+        var fbName by remember { mutableStateOf("") }
+        var fbEmail by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showFacebookDialog = false },
+            containerColor = Color(0xFF1F1F26),
+            title = {
+                Text("Sign in with Facebook", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = fbName,
+                        onValueChange = { fbName = it },
+                        label = { Text("Your Name", color = ChaiTextSecondary) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color(0xFF1877F2),
+                            unfocusedBorderColor = ChaiBorder
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = fbEmail,
+                        onValueChange = { fbEmail = it },
+                        label = { Text("Facebook Email / ID", color = ChaiTextSecondary) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color(0xFF1877F2),
+                            unfocusedBorderColor = ChaiBorder
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val finalName = fbName.trim().ifBlank { "Facebook User" }
+                        val finalEmail = fbEmail.trim().ifBlank { "user@facebook.com" }
+                        showFacebookDialog = false
+                        onSignIn(finalName, finalEmail, "Facebook")
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1877F2))
+                ) {
+                    Text("Sign In", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFacebookDialog = false }) {
                     Text("Cancel", color = ChaiTextSecondary)
                 }
             }
