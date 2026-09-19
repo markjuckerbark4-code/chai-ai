@@ -160,6 +160,7 @@ fun ChaiApp(viewModel: MainViewModel = viewModel()) {
                                 onAddPersona = { name, pronouns, desc -> viewModel.addPersona(name, pronouns, desc) },
                                 onSelectPersona = { viewModel.selectPersona(it) },
                                 onDeletePersona = { viewModel.deletePersona(it) },
+                                onRestorePurchases = { viewModel.restorePurchases() },
                                 onLogout = { viewModel.logout() }
                             )
                         }

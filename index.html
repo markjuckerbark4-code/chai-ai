@@ -1079,6 +1079,11 @@
                 if (localU.pending_order && !merged[rIdx].pending_order) {
                   merged[rIdx].pending_order = localU.pending_order;
                 }
+                if (localU.is_premium && !merged[rIdx].is_premium) {
+                  merged[rIdx].is_premium = true;
+                  merged[rIdx].tier = localU.tier;
+                  merged[rIdx].expiry_date = localU.expiry_date;
+                }
               }
             });
             allUsers = merged;
@@ -1096,12 +1101,17 @@
           if (remoteOrders.length > 0) {
             const mergedOrders = [...remoteOrders];
             allOrders.forEach(localO => {
-              const exists = mergedOrders.some(r => 
+              const rIdx = mergedOrders.findIndex(r => 
                 (r.order_id && localO.order_id && r.order_id === localO.order_id) ||
                 (r.trx_id && localO.trx_id && r.trx_id.trim().toUpperCase() === localO.trx_id.trim().toUpperCase())
               );
-              if (!exists) {
+              if (rIdx === -1) {
                 mergedOrders.unshift(localO);
+              } else {
+                if (localO.status === 'approved' && mergedOrders[rIdx].status !== 'approved') {
+                  mergedOrders[rIdx].status = 'approved';
+                  mergedOrders[rIdx].approved_at = localO.approved_at || new Date().toISOString();
+                }
               }
             });
             allOrders = mergedOrders;

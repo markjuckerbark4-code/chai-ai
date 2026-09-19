@@ -93,6 +93,7 @@ fun ProfileScreen(
     onAddPersona: (String, String, String) -> Unit,
     onSelectPersona: (Long) -> Unit,
     onDeletePersona: (Long) -> Unit,
+    onRestorePurchases: () -> Unit = {},
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
@@ -318,11 +319,7 @@ fun ProfileScreen(
             // 4. Restore Purchases Button
             Button(
                 onClick = {
-                    if (userAccount.isPremium) {
-                        Toast.makeText(context, "✅ Premium সক্রিয় আছে: ${userAccount.memberTier}", Toast.LENGTH_LONG).show()
-                    } else {
-                        Toast.makeText(context, "ক্লাউড থেকে সাবস্ক্রিপশন চেক করা হচ্ছে...", Toast.LENGTH_SHORT).show()
-                    }
+                    onRestorePurchases()
                 },
                 shape = RoundedCornerShape(22.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22222D)),

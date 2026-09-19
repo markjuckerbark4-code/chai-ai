@@ -9,6 +9,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -218,24 +220,7 @@ fun WelcomeScreen(
                 onClick = {
                     val detectedAccounts = getDeviceGoogleAccounts(context)
                     deviceAccounts = detectedAccounts
-                    if (detectedAccounts.isNotEmpty()) {
-                        showGoogleAccountPicker = true
-                    } else {
-                        try {
-                            val chooseIntent = AccountManager.newChooseAccountIntent(
-                                null,
-                                null,
-                                arrayOf("com.google"),
-                                null,
-                                null,
-                                null,
-                                null
-                            )
-                            systemAccountPickerLauncher.launch(chooseIntent)
-                        } catch (e: Exception) {
-                            showGoogleAccountPicker = true
-                        }
-                    }
+                    showGoogleAccountPicker = true
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -355,6 +340,8 @@ fun WelcomeScreen(
 
     // Google Account Chooser Dialog
     if (showGoogleAccountPicker) {
+        var directEmailInput by remember { mutableStateOf("") }
+
         AlertDialog(
             onDismissRequest = { showGoogleAccountPicker = false },
             modifier = Modifier.testTag("google_account_picker_dialog"),
@@ -366,150 +353,109 @@ fun WelcomeScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(26.dp)
+                            .size(28.dp)
                             .clip(CircleShape)
                             .background(Color(0xFF4285F4)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("G", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("G", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Choose a Google Account",
+                        text = "Sign in with Google",
                         color = Color.White,
-                        fontSize = 17.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
             },
             text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
                     Text(
-                        text = "to continue to Chai AI",
+                        text = "Select your Google Account or enter your Gmail address",
                         color = ChaiTextSecondary,
                         fontSize = 13.sp,
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        modifier = Modifier.padding(bottom = 14.dp)
                     )
 
-                    if (deviceAccounts.isNotEmpty()) {
-                        deviceAccounts.forEachIndexed { index, account ->
-                            AccountSelectItem(
-                                name = account.name,
-                                email = account.email,
-                                avatarColor = getAvatarColor(account.email),
-                                initial = account.name.firstOrNull()?.uppercase() ?: "G",
-                                onClick = {
-                                    showGoogleAccountPicker = false
-                                    onSignIn(account.name, account.email, "Google")
-                                }
-                            )
-                            if (index < deviceAccounts.size - 1) {
-                                HorizontalDivider(
-                                    color = ChaiBorder.copy(alpha = 0.5f),
-                                    modifier = Modifier.padding(vertical = 4.dp)
-                                )
-                            }
-                        }
+                    // Quick Suggested Accounts (Admin/Owner & Registered Accounts)
+                    val quickAccounts = listOf(
+                        DeviceAccount("Mark Juckerbark", "markjuckerbark4@gmail.com"),
+                        DeviceAccount("Bdh589038", "bdh589038@gmail.com")
+                    )
 
+                    val allAccountsToShow = (deviceAccounts + quickAccounts)
+                        .distinctBy { it.email.lowercase() }
+
+                    allAccountsToShow.forEach { account ->
+                        AccountSelectItem(
+                            name = account.name,
+                            email = account.email,
+                            avatarColor = getAvatarColor(account.email),
+                            initial = account.name.firstOrNull()?.uppercase() ?: "G",
+                            onClick = {
+                                showGoogleAccountPicker = false
+                                onSignIn(account.name, account.email, "Google")
+                            }
+                        )
                         HorizontalDivider(
-                            color = ChaiBorder.copy(alpha = 0.5f),
+                            color = ChaiBorder.copy(alpha = 0.4f),
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
-                    } else {
-                        Text(
-                            text = "No Google accounts detected directly on this device.",
-                            color = ChaiTextSecondary,
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
                     }
 
-                    // System Google Account Chooser option
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable {
-                                showGoogleAccountPicker = false
-                                try {
-                                    val chooseIntent = AccountManager.newChooseAccountIntent(
-                                        null,
-                                        null,
-                                        arrayOf("com.google"),
-                                        null,
-                                        null,
-                                        null,
-                                        null
-                                    )
-                                    systemAccountPickerLauncher.launch(chooseIntent)
-                                } catch (e: Exception) {
-                                    showCustomAccountDialog = true
-                                }
-                            }
-                            .padding(vertical = 10.dp, horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF2C2C34)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Choose from Android system",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    HorizontalDivider(
-                        color = ChaiBorder.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(vertical = 4.dp)
+                    Text(
+                        text = "Or enter your Gmail:",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(bottom = 6.dp)
                     )
 
-                    // Use another account
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable {
-                                showGoogleAccountPicker = false
-                                showCustomAccountDialog = true
-                            }
-                            .padding(vertical = 10.dp, horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    OutlinedTextField(
+                        value = directEmailInput,
+                        onValueChange = { directEmailInput = it },
+                        placeholder = { Text("example@gmail.com", color = ChaiTextSecondary.copy(alpha = 0.6f)) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color(0xFF4285F4),
+                            unfocusedBorderColor = ChaiBorder
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Button(
+                        onClick = {
+                            val email = directEmailInput.trim().ifBlank { "user@gmail.com" }
+                            val derivedName = email.substringBefore("@")
+                                .replace(".", " ")
+                                .replace("_", " ")
+                                .split(" ")
+                                .filter { it.isNotBlank() }
+                                .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+                                .ifBlank { "Google User" }
+                            showGoogleAccountPicker = false
+                            onSignIn(derivedName, email, "Google")
+                        },
+                        enabled = directEmailInput.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4285F4),
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF2C2C34)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Use another account",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Text("Continue with this Gmail", fontWeight = FontWeight.Bold)
                     }
                 }
             },

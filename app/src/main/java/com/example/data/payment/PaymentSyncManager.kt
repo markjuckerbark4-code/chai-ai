@@ -201,7 +201,8 @@ object PaymentSyncManager {
         val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
         try {
-            val response = httpGet(USERS_URL)
+            var foundUserStatus: CloudUserStatus? = null
+            val response = httpGet(USERS_URL, force = true)
             if (response.isNotBlank()) {
                 val root = JSONObject(response)
                 val dataObj = root.optJSONObject("data") ?: root
@@ -227,7 +228,6 @@ object PaymentSyncManager {
                                 sdf.timeZone = TimeZone.getTimeZone("UTC")
                                 val expiryTime = sdf.parse(expiryDate)?.time ?: Long.MAX_VALUE
                                 if (System.currentTimeMillis() > expiryTime) {
-                                    // Expired!
                                     isPremium = false
                                     tier = "none"
                                 }
@@ -236,15 +236,7 @@ object PaymentSyncManager {
                             }
                         }
 
-                        // Cache in SharedPreferences
-                        prefs?.edit()
-                            ?.putString("user_tier", tier)
-                            ?.putBoolean("is_premium", isPremium)
-                            ?.putBoolean("is_banned", isBanned)
-                            ?.putString("expiry_date", expiryDate)
-                            ?.apply()
-
-                        return@withContext CloudUserStatus(
+                        foundUserStatus = CloudUserStatus(
                             userId = userId,
                             name = name,
                             email = userEmail,
@@ -253,40 +245,62 @@ object PaymentSyncManager {
                             isBanned = isBanned,
                             expiryDate = expiryDate
                         )
+                        break
                     }
                 }
             }
 
-            // Dual verification: Check ORDERS_URL if an order was directly approved
-            val ordResponse = httpGet(ORDERS_URL)
-            if (ordResponse.isNotBlank()) {
-                try {
-                    val ordRoot = JSONObject(ordResponse)
-                    val ordData = ordRoot.optJSONObject("data") ?: ordRoot
-                    val ordArray = ordData.optJSONArray("orders") ?: JSONArray()
-                    for (i in 0 until ordArray.length()) {
-                        val o = ordArray.optJSONObject(i) ?: continue
-                        val oEmail = o.optString("user_email", "").trim()
-                        val oStatus = o.optString("status", "").lowercase()
-                        if (oEmail.equals(userEmail.trim(), ignoreCase = true) && oStatus == "approved") {
-                            val isUltra = o.optString("plan").contains("year", ignoreCase = true) ||
-                                o.optString("amount").contains("2000") ||
-                                o.optString("amount").contains("18")
-                            val tier = if (isUltra) "ultra" else "premium"
-                            return@withContext CloudUserStatus(
-                                userId = o.optString("order_id", ""),
-                                name = o.optString("user_name", ""),
-                                email = userEmail,
-                                tier = tier,
-                                isPremium = true,
-                                isBanned = false,
-                                expiryDate = null
-                            )
+            // Dual verification: If not premium yet, check ORDERS_URL if an order was directly approved
+            if (foundUserStatus == null || !foundUserStatus.isPremium) {
+                val ordResponse = httpGet(ORDERS_URL, force = true)
+                if (ordResponse.isNotBlank()) {
+                    try {
+                        val ordRoot = JSONObject(ordResponse)
+                        val ordData = ordRoot.optJSONObject("data") ?: ordRoot
+                        val ordArray = ordData.optJSONArray("orders") ?: JSONArray()
+                        for (i in 0 until ordArray.length()) {
+                            val o = ordArray.optJSONObject(i) ?: continue
+                            val oEmail = o.optString("user_email", "").trim()
+                            val oStatus = o.optString("status", "").lowercase()
+                            if (oEmail.equals(userEmail.trim(), ignoreCase = true) && oStatus == "approved") {
+                                val isUltra = o.optString("plan").contains("year", ignoreCase = true) ||
+                                    o.optString("amount").contains("2000") ||
+                                    o.optString("amount").contains("18")
+                                val tier = if (isUltra) "ultra" else "premium"
+                                val finalStatus = CloudUserStatus(
+                                    userId = foundUserStatus?.userId?.ifBlank { o.optString("order_id", "") } ?: o.optString("order_id", ""),
+                                    name = foundUserStatus?.name?.ifBlank { o.optString("user_name", "") } ?: o.optString("user_name", ""),
+                                    email = userEmail,
+                                    tier = tier,
+                                    isPremium = true,
+                                    isBanned = foundUserStatus?.isBanned ?: false,
+                                    expiryDate = foundUserStatus?.expiryDate
+                                )
+
+                                prefs?.edit()
+                                    ?.putString("user_tier", tier)
+                                    ?.putBoolean("is_premium", true)
+                                    ?.putBoolean("is_banned", finalStatus.isBanned)
+                                    ?.putString(KEY_LAST_STATUS, "approved")
+                                    ?.apply()
+
+                                return@withContext finalStatus
+                            }
                         }
+                    } catch (e: Exception) {
+                        Log.d(TAG, "Orders check skipped: ${e.message}")
                     }
-                } catch (e: Exception) {
-                    Log.d(TAG, "Orders check skipped: ${e.message}")
                 }
+            }
+
+            if (foundUserStatus != null) {
+                prefs?.edit()
+                    ?.putString("user_tier", foundUserStatus.tier)
+                    ?.putBoolean("is_premium", foundUserStatus.isPremium)
+                    ?.putBoolean("is_banned", foundUserStatus.isBanned)
+                    ?.putString("expiry_date", foundUserStatus.expiryDate)
+                    ?.apply()
+                return@withContext foundUserStatus
             }
         } catch (e: Exception) {
             Log.w(TAG, "fetchUserStatus warning: ${e.message}")
@@ -594,7 +608,7 @@ object PaymentSyncManager {
                 connectTimeout = 7000
                 readTimeout = 7000
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "ChaiAi-Android/1.0")
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36")
             }
             val responseCode = conn.responseCode
             if (responseCode in 200..299) {
@@ -630,7 +644,7 @@ object PaymentSyncManager {
                 readTimeout = 7000
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "ChaiAi-Android/1.0")
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36")
             }
             val bytes = payload.toByteArray(StandardCharsets.UTF_8)
             conn.setFixedLengthStreamingMode(bytes.size)

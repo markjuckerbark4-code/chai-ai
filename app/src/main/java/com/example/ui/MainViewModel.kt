@@ -135,6 +135,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     provider = current.provider
                 )
                 checkUserStatusOnce(current.email)
+                if (!current.isPremium) {
+                    startApprovalCheckLoop(current.email)
+                }
             }
         }
     }
@@ -521,18 +524,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         approvalJob?.cancel()
         approvalJob = viewModelScope.launch {
             var attempts = 0
-            val maxAttempts = 15 // Check for up to 5 minutes
+            val maxAttempts = 30 // Check for up to 5 minutes (every 10 seconds)
             while (isActive && attempts < maxAttempts) {
                 attempts++
-                delay(20000L) // check every 20 seconds
+                delay(10000L) // check every 10 seconds
                 val cloudStatus = PaymentSyncManager.fetchUserStatus(email, getApplication())
                 if (cloudStatus != null) {
                     applyUserStatus(cloudStatus)
                     if (cloudStatus.isPremium) {
-                        // User is now premium! Stop polling loop.
+                        try {
+                            android.widget.Toast.makeText(
+                                getApplication(),
+                                "🎉 অভিনন্দন! আপনার ${if (cloudStatus.tier == "ultra") "Ultra (১০ মাস)" else "Premium (৭ দিন)"} প্ল্যান সক্রিয় হয়েছে!",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        } catch (e: Exception) {}
                         break
                     }
                 }
+            }
+        }
+    }
+
+    fun restorePurchases() {
+        val email = userAccount.value.email
+        if (email.isBlank()) {
+            android.widget.Toast.makeText(getApplication(), "দয়া করে প্রথমে সাইন ইন করুন।", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        viewModelScope.launch {
+            android.widget.Toast.makeText(getApplication(), "ক্লাউড থেকে সাবস্ক্রিপশন চেক করা হচ্ছে...", android.widget.Toast.LENGTH_SHORT).show()
+            val cloudStatus = PaymentSyncManager.fetchUserStatus(email, getApplication())
+            if (cloudStatus != null) {
+                applyUserStatus(cloudStatus)
+                if (cloudStatus.isPremium) {
+                    val planName = if (cloudStatus.tier == "ultra") "Ultra (১০ মাস)" else "Premium (৭ দিন)"
+                    android.widget.Toast.makeText(getApplication(), "✅ সাবস্ক্রিপশন সক্রিয় হয়েছে: $planName!", android.widget.Toast.LENGTH_LONG).show()
+                } else {
+                    android.widget.Toast.makeText(getApplication(), "আপনার অ্যাকাউন্টে কোনো সক্রিয় পেইড প্ল্যান পাওয়া যায়নি। পেমেন্ট করে থাকলে অ্যাডমিন অনুমোদনের অপেক্ষা করুন।", android.widget.Toast.LENGTH_LONG).show()
+                }
+            } else {
+                android.widget.Toast.makeText(getApplication(), "ক্লাউড সার্ভারের সাথে সংযোগ স্থাপন করা যায়নি। অনুগ্রহ করে ইন্টারনেট চেক করুন।", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
     }
